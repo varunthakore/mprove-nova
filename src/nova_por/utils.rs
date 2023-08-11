@@ -70,7 +70,7 @@ pub fn point_to_vec<F: PrimeField + PrimeFieldBits>(point: AffinePoint) -> Vec<F
     out_vec
 }
 
-fn vec_to_point<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(vec: Vec<F>) -> AffinePoint {
+pub fn vec_to_point<F: PrimeField<Repr = [u8; 32]>>(vec: Vec<F>) -> AffinePoint {
     assert_eq!(vec.len(), 4);
     let x0 = vec[0].to_repr();
     let x1 = vec[1].to_repr();
@@ -289,7 +289,7 @@ mod tests {
         let mut rng = rand_08::thread_rng();
         let d = U256::to_le_bytes(&U256::from_be_hex("52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3"));
         let d_fe = Fe25519::from_repr(d).unwrap();
-        let mut point = AffinePoint::default();
+        let point;
         loop {
             let y = Fe25519::random(&mut rng);
             let y_sq = y.square();

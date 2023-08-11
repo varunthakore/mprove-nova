@@ -12,7 +12,7 @@ use neptune::{Strength, Arity};
 use ff::{PrimeField, PrimeFieldBits};
 use nova_snark::traits::circuit::StepCircuit;
 
-use super::utils::point_to_vec;
+use super::utils::{vec_to_point, point_to_vec};
 use bp_ed25519::curve::{AffinePoint, Ed25519Curve};
 use bp_ed25519::nonnative::circuit::AllocatedAffinePoint;
 use merkle_trees::hash::circuit::hash_circuit;
@@ -108,8 +108,11 @@ where
     }
 
     pub fn get_z0(&self) -> Vec<F> {
-        let z0 = vec![self.kit.root, self.utxot.root, F::ZERO];
-        assert_eq!(z0.len(), 3);
+        let mut z0 = vec![self.kit.root, self.utxot.root, F::ZERO];
+        let zero_comm = Ed25519Curve::basepoint();
+        let zero_comm_vec: Vec<F> = point_to_vec(zero_comm);
+        z0.extend(zero_comm_vec);
+        assert_eq!(z0.len(), 7);
         z0
     }
 }
@@ -124,7 +127,7 @@ where
     A12: Arity<F> + Send + Sync,
 {
     fn arity(&self) -> usize {
-        3
+        7
     }
 
     fn synthesize<CS: ConstraintSystem<F>>(
@@ -319,6 +322,35 @@ where
             dst_root_var,
             hash_x,
         )?;
+
+        // Sum commitments to ammount
+        let basepoint_vec: Vec<F> = point_to_vec(Ed25519Curve::basepoint());
+        let mut vec = vec![];
+        vec.push(z[3].get_value().unwrap_or(basepoint_vec[0]));
+        vec.push(z[4].get_value().unwrap_or(basepoint_vec[1]));
+        vec.push(z[5].get_value().unwrap_or(basepoint_vec[2]));
+        vec.push(z[6].get_value().unwrap_or(basepoint_vec[3]));
+        let c_total = vec_to_point(vec);
+        let alloc_c_total = AllocatedAffinePoint::alloc_affine_point(
+            &mut cs.namespace(|| "Alloc c_total"), 
+            c_total
+        )?;
+        let alloc_c = AllocatedAffinePoint::alloc_affine_point(
+            &mut cs.namespace(|| "alloc c"), 
+            self.c
+        )?;
+        let c_new_total = AllocatedAffinePoint::ed25519_point_addition(
+            &mut cs.namespace(|| "Add commitments"), 
+            &alloc_c, 
+        &alloc_c_total
+        )?;
+        let c_new_total_vec: Vec<AllocatedNum<F>> = point_to_vec(c_new_total.get_point())
+            .into_iter()
+            .enumerate()
+            .map(|(i, s)| {
+                AllocatedNum::alloc(cs.namespace(|| format!("c_new_total_vec {}", i)), || Ok(s))
+            })
+            .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()?;
         
         // Output
         let mut out_vec = vec![];
@@ -333,16 +365,23 @@ where
         out_vec.push(alloc_kit_root);
         out_vec.push(alloc_utxot_root);
         out_vec.push(hash_dst_root);
+        out_vec.extend(c_new_total_vec);
 
         Ok(out_vec)
     }
 
     fn output(&self, z: &[F]) -> Vec<F> {
-        assert_eq!(z.len(), 3);
+        assert_eq!(z.len(), 7);
         assert_eq!(z[0], self.kit.root);
         assert_eq!(z[1], self.utxot.root);
         
-        vec![self.kit.root, self.utxot.root, self.hash_dst_root]
+        let mut out  = vec![self.kit.root, self.utxot.root, self.hash_dst_root];
+        let vec: Vec<F> = vec![z[3], z[4], z[5], z[6]];
+        let c_total = vec_to_point(vec);
+        let c_total_new  = c_total + self.c;
+        let c_total_new_vec: Vec<F> = point_to_vec(c_total_new);
+        out.extend(c_total_new_vec);
+        out 
     }
 }
 
