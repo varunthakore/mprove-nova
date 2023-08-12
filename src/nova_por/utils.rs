@@ -22,6 +22,7 @@ use merkle_trees::hash::vanilla::hash;
 pub const KIT_HEIGHT: usize = 32;
 pub const DST_HEIGHT: usize = 32;
 pub const UTXO_HEIGHT: usize = 32;
+pub const BLOCK_HEIGHT: u128 = 1001; // Insert Block Height for POR
 
 // Convert AffinePoint to Vec<F>. Representing x as two feild elements. Similarly for y.
 pub fn point_to_vec<F: PrimeField + PrimeFieldBits>(point: AffinePoint) -> Vec<F> {
@@ -197,7 +198,7 @@ pub fn read_dst<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64;
     trees.push(empty_tree.clone());
 
     for x in keys.iter().rev().skip(1).rev() {
-        let hash_x = hash(vec![*x], &x_hash_params);
+        let hash_x = hash(vec![*x, F::from_u128(BLOCK_HEIGHT)], &x_hash_params);
         empty_tree.insert_vanilla(hash_x);
         trees.push(empty_tree.clone());
 
@@ -209,11 +210,11 @@ pub fn read_dst<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64;
     }
 
     // last insertion into index tree
-    let hash_p = hash(
-        vec![keys[keys.len() - 1]],
+    let hash_x = hash(
+        vec![keys[keys.len() - 1], F::from_u128(BLOCK_HEIGHT)],
             &x_hash_params,
     );
-    empty_tree.insert_vanilla(hash_p);
+    empty_tree.insert_vanilla(hash_x);
 
     // last hash root
     let r = F::random(&mut rng);

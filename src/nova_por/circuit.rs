@@ -21,7 +21,7 @@ use merkle_trees::index_tree::tree::{idx_to_bits, IndexTree};
 use merkle_trees::vanilla_tree::tree::MerkleTree;
 use merkle_trees::vanilla_tree;
 
-use super::utils::{read_comm, read_dst, read_hash_addr, read_keys, read_kit, read_utxot, get_utxo_leaf, DST_HEIGHT, KIT_HEIGHT, UTXO_HEIGHT};
+use super::utils::{read_comm, read_dst, read_hash_addr, read_keys, read_kit, read_utxot, get_utxo_leaf, DST_HEIGHT, KIT_HEIGHT, UTXO_HEIGHT, BLOCK_HEIGHT};
 
 #[derive(Clone, Debug)]
 pub struct PORIteration<F: PrimeField + PrimeFieldBits, A1: Arity<F> + Send + Sync, A2: Arity<F> + Send + Sync, A3: Arity<F> + Send + Sync, A4: Arity<F> + Send + Sync, A12: Arity<F> + Send + Sync> {
@@ -77,7 +77,7 @@ where
         let keys: Vec<F> = read_keys::<F>();
         let comms = read_comm();
         let hash_ps = read_hash_addr();
-        let (dsts, salts, hash_dst_roots) = read_dst::<F, A1, A3, A2>();
+        let (dsts, salts, hash_dst_roots) = read_dst::<F, A2, A3, A2>();
         let utxot = read_utxot();
         let kit = read_kit();
     
@@ -173,10 +173,13 @@ where
         assert_eq!(x_vec.len(), 253);
 
         // x is absent in DST
-        let x_hash_params = Sponge::<F, A1>::api_constants(Strength::Standard);
+        let alloc_block_height = AllocatedNum::alloc(
+            &mut cs.namespace(|| "alloc block height"), || Ok(F::from_u128(BLOCK_HEIGHT))
+        )?;
+        let x_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
         let hash_x = hash_circuit(
             &mut cs.namespace(|| "hash addr"),
-            vec![x_alloc],
+            vec![x_alloc, alloc_block_height.clone()],
             &x_hash_params,
         )?;
         let dst_root_var: AllocatedNum<F> =
@@ -189,7 +192,7 @@ where
         )?;
         let x_bit = AllocatedBit::alloc(cs.namespace(|| "alloc p bit"), x_is_non_member.get_value())?;
         cs.enforce(
-            || "enforce p_bit equal to one",
+            || "enforce x_bit equal to one",
             |lc| lc,
             |lc| lc,
             |lc| lc + CS::one() - x_bit.get_variable(),
@@ -314,13 +317,13 @@ where
             |lc| lc + CS::one() - k_bit.get_variable(),
         );
 
-        // Insert P in DST
+        // Insert x in DST
         let mut next_dst = self.dst.clone();
         index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
             cs.namespace(|| "Insert P"),
             &mut next_dst,
             dst_root_var,
-            hash_x,
+            hash_x.clone(),
         )?;
 
         // Sum commitments to ammount
@@ -399,7 +402,9 @@ mod tests {
         let iters: Vec<PORIteration<Fp, U1, U2, U3, U4, U12>> = PORIteration::get_iters();
 
         for i in 0..1 {
-            let z_in: Vec<Fp> = vec![iters[i].kit.root.clone(), iters[i].utxot.root.clone(), iters[i].hash_dst_root];
+            let mut z_in: Vec<Fp> = vec![iters[i].kit.root.clone(), iters[i].utxot.root.clone(), iters[i].hash_dst_root];
+            let basept: Vec<Fp> = point_to_vec(Ed25519Curve::basepoint());
+            z_in.extend(basept);
             let alloc_z_in: Vec<AllocatedNum<Fp>> = z_in.iter().enumerate().map(|(j,v)| 
                 AllocatedNum::alloc(cs.namespace(|| format!("{i} : alloc input {j}")), || Ok(*v)).unwrap()
             ).collect();
@@ -414,7 +419,7 @@ mod tests {
             for i in 0..z_out.len() {
                 assert_eq!(z_out[i].get_value().unwrap(), z_out_exp[i]);
             }
-            print!("iteration {} done", i);
+            println!("iteration {} done", i);
         }
 
         assert!(cs.is_satisfied());
