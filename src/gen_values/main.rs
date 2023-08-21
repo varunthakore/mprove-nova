@@ -9,8 +9,7 @@ use sha3::Keccak512;
 
 use bp_ed25519::field::Fe25519;
 use bp_ed25519::curve::AffinePoint;
-use rand_07;
-use rand_07::Rng;
+use rand_07::{self, Rng};
 
 use std::env;
 use std::fs::OpenOptions;
@@ -159,10 +158,11 @@ mod test {
     use std::io::Read;
     use bp_ed25519::curve::Ed25519Curve;
     use crypto_bigint::{U256, Encoding};
+    use rand_07::thread_rng;
 
     #[test]
     fn test_amt_to_bytes() {
-        let mut rng = rand_07::thread_rng();
+        let mut rng = thread_rng();
         let a: Scalar = Scalar::from(rng.gen::<u64>());
         let a_bytes = scalar_to_bytes(a); // a_bytes is little-endian
 
@@ -195,7 +195,7 @@ mod test {
 
     #[test]
     fn test_key_to_bytes() {
-        let mut rng = rand_07::thread_rng();
+        let mut rng = thread_rng();
         let random_bytes: [u8; 32] = rng.gen();
         let x: Scalar = Scalar::from_bytes_mod_order(random_bytes);
         let x_bytes = scalar_to_bytes(x); // x_bytes is little-endian
@@ -257,7 +257,7 @@ mod test {
 
     #[test]
     fn test_ristretto_to_affine() {
-        let mut rng = rand_07::thread_rng();
+        let mut rng = thread_rng();
         let b = Ed25519Curve::basepoint();
         let x = U256::from(rng.gen::<u64>());
         let point = Ed25519Curve::scalar_multiplication(&b, &x);

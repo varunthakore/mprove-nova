@@ -187,7 +187,7 @@ pub fn read_kit<F: PrimeField + PrimeFieldBits + PartialOrd, AL:Arity<F>, AN:Ari
 }
 
 pub fn read_dst<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd, AX: Arity<F>, AL:Arity<F>, AN:Arity<F>>() -> (Vec<IndexTree<F, DST_HEIGHT, AL, AN>>, Vec<F>, Vec<F>) {
-    let mut rng = rand_08::thread_rng();
+    let mut rng = rand::thread_rng();
     let x_hash_params = Sponge::<F, AX>::api_constants(Strength::Standard);
     let root_hash_params = Sponge::<F, AN>::api_constants(Strength::Standard);
     let mut hash_output_roots: Vec<F> = vec![];
@@ -287,7 +287,7 @@ mod tests {
     use crypto_bigint::Encoding;
 
     fn random_point() -> AffinePoint {
-        let mut rng = rand_08::thread_rng();
+        let mut rng = rand::thread_rng();
         let d = U256::to_le_bytes(&U256::from_be_hex("52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3"));
         let d_fe = Fe25519::from_repr(d).unwrap();
         let point;
