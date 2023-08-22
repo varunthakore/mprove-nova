@@ -11,10 +11,10 @@ use bp_ed25519::field::Fe25519;
 use bp_ed25519::curve::AffinePoint;
 use rand_07::{self, Rng};
 
-use std::env;
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::{env, fs::File};
+use std::io::{Write, BufWriter};
 use ff::{Field, PrimeField};
+
 
 pub fn scalar_to_bytes(s: Scalar) -> [u8; 32] {
     Scalar::to_bytes(&s)
@@ -60,136 +60,118 @@ fn main() {
         }
     };
 
-    // Remove old files if they exists
-    std::fs::remove_file("./src/gen_values/a.txt").ok();
-    std::fs::remove_file("./src/gen_values/x.txt").ok();
-    std::fs::remove_file("./src/gen_values/c.txt").ok();
-    std::fs::remove_file("./src/gen_values/p.txt").ok();
-    std::fs::remove_file("./src/gen_values/hp.txt").ok();
-    std::fs::remove_file("./src/gen_values/i.txt").ok();
+    let file_err_msg = "Unable to create or write to file";
+    let amount_file_name = "a.txt";
+    let private_key_file_name = "x.txt";
+    let commitment_file_name = "c.txt";
+    let public_key_file_name = "p.txt";
+    let public_key_hash_file_name = "hp.txt";
+    let keyimage_file_name = "i.txt";
+
+
+    let amount_file = File::create(amount_file_name).expect(file_err_msg);
+    let mut amount_buf = BufWriter::new(amount_file);
+    let private_key_file = File::create(private_key_file_name).expect(file_err_msg);
+    let mut private_key_buf = BufWriter::new(private_key_file);
+    let commitment_file = File::create(commitment_file_name).expect(file_err_msg);
+    let mut commitment_buf = BufWriter::new(commitment_file);
+    let public_key_file = File::create(public_key_file_name).expect(file_err_msg);
+    let mut public_key_buf = BufWriter::new(public_key_file);
+    let public_key_hash_file = File::create(public_key_hash_file_name).expect(file_err_msg);
+    let mut public_key_hash_buf = BufWriter::new(public_key_hash_file);
+    let keyimage_file = File::create(keyimage_file_name).expect(file_err_msg);
+    let mut keyimage_buf = BufWriter::new(keyimage_file);
+
+    // G, H - curve points for generating outputs and key-images
+    let g = constants::RISTRETTO_BASEPOINT_POINT;
+    let h = RistrettoPoint::hash_from_bytes::<Sha512>(g.compress().as_bytes());
 
     for i in 0..num_gen {
-        // Copied from https://github.com/suyash67/MProve-Ristretto/tree/master/src/proofs
-        // generate random ammounts from 2^64 -1
+        // generate random amounts from 2^64 -1
         let a: Scalar = Scalar::from(rng.gen::<u64>());
         // generate blinding factors
         let r: Scalar = Scalar::random(&mut rng);
         // generate secret keys
         let random_bytes: [u8; 32] = rng.gen();
         let x: Scalar = Scalar::from_bytes_mod_order(random_bytes);
-        // G, H - curve points for generating outputs and key-images
-        let g = constants::RISTRETTO_BASEPOINT_POINT;
-        let h = RistrettoPoint::hash_from_bytes::<Sha512>(g.compress().as_bytes());
 
         let c = g * r + h * a;
         let p = g * x;
         let hp = RistrettoPoint::hash_from_bytes::<Keccak512>(p.compress().as_bytes());
         let key_img = hp * x;
 
-        // Write Ammounts
-        let a_bytes = scalar_to_bytes(a);
-        let mut afile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/a.txt")
-            .unwrap();
-        afile.write_all(&a_bytes).unwrap();
+        // Write amounts
+        let amount_bytes = scalar_to_bytes(a);
+        writeln!(amount_buf, "{}", hex::encode(amount_bytes)).expect(file_err_msg);
 
         // Write keys
         let x_bytes = scalar_to_bytes(x);
-        let mut xfile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/x.txt")
-            .unwrap();
-        xfile.write_all(&x_bytes).unwrap();
+        writeln!(private_key_buf, "{}", hex::encode(x_bytes)).expect(file_err_msg);
 
-        // Write C
+        // Write commitments
         let (cx, cy) = ristretto_to_affine(c);
-        let mut cfile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/c.txt")
-            .unwrap();
-        cfile.write_all(&cx).unwrap();
-        cfile.write_all(&cy).unwrap();
+        writeln!(commitment_buf, "{} {}", hex::encode(cx), hex::encode(cy)).expect(file_err_msg);
 
         // Write P
         let (px, py) = ristretto_to_affine(p);
-        let mut pfile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/p.txt")
-            .unwrap();
-        pfile.write_all(&px).unwrap();
-        pfile.write_all(&py).unwrap();
+        writeln!(public_key_buf, "{} {}", hex::encode(px), hex::encode(py)).expect(file_err_msg);
 
         // Write H_P
         let (hpx, hpy) = ristretto_to_affine(hp);
-        let mut hpfile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/hp.txt")
-            .unwrap();
-        hpfile.write_all(&hpx).unwrap();
-        hpfile.write_all(&hpy).unwrap();
+        writeln!(public_key_hash_buf, "{} {}", hex::encode(hpx), hex::encode(hpy)).expect(file_err_msg);
 
         // Write Key Images
         let (ix, iy) = ristretto_to_affine(key_img);
-        let mut ifile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/i.txt")
-            .unwrap();
-        ifile.write_all(&ix).unwrap();
-        ifile.write_all(&iy).unwrap();
+        writeln!(keyimage_buf, "{} {}", hex::encode(ix), hex::encode(iy)).expect(file_err_msg);
 
         if i % 500 == 0 {
-            println!("{}th value generated", i);
+            println!("Value with index {i} generated");
         }
     }
-    println!("generation complete !");
+    println!("Values generation complete!");
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::fs::File;
-    use std::io::Read;
+    use std::{fs::File, io};
+    use std::io::BufRead;
+    use std::path::Path;
     use bp_ed25519::curve::Ed25519Curve;
     use crypto_bigint::{U256, Encoding};
     use rand_07::thread_rng;
+
+    // Code from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
+    fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+    where P: AsRef<Path>, {
+        let file = File::open(filename)?;
+        Ok(io::BufReader::new(file).lines())
+    }
 
     #[test]
     fn test_amt_to_bytes() {
         let mut rng = thread_rng();
         let a: Scalar = Scalar::from(rng.gen::<u64>());
-        let a_bytes = scalar_to_bytes(a); // a_bytes is little-endian
+        let a_bytes = scalar_to_bytes(a).to_vec(); // a_bytes is little-endian
 
-        // Remove old file if it exists
-        std::fs::remove_file("./src/gen_values/a_test.txt").ok();
+        let file_err_msg = "Unable to create or write to file";
+        let amount_file_name = "a_test.txt";
+        let amount_file = File::create(amount_file_name).expect(file_err_msg);
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/a_test.txt")
-            .unwrap();
-        file.write_all(&a_bytes).unwrap();
+        let mut amount_buf = BufWriter::new(amount_file);
+        let amount_hex_string = hex::encode(a_bytes);
+        writeln!(amount_buf, "{amount_hex_string}").expect(file_err_msg);
+        let _ = amount_buf.flush();
 
-        // read ammount from a file
-        let mut file = File::open("./src/gen_values/a_test.txt").unwrap();
-        let mut buffer = vec![0; 32];
-        loop {
-            let bytes_read = file.read(&mut buffer).unwrap();
-            if bytes_read == 0 {
-                break;
+        // read amount from file
+        if let Ok(lines) = read_lines(amount_file_name) {
+            for line in lines {
+                if let Ok(amount_string_read) = line {
+                    assert_eq!(amount_string_read, amount_hex_string);
+                }
             }
-            let d: [u8; 32] = buffer[..bytes_read].try_into().unwrap();
-            // a can be represented as a single feild element
-            // assert_eq!(Fp::from_repr(a_bytes).unwrap(), Fp::from_repr(d).unwrap());
-            assert_eq!(a_bytes, d);
-            println!("Scalar is {:?}", a);
-            println!("Fp is {:?}", d);
+        } else {
+            assert!(false)
         }
     }
 
@@ -200,59 +182,69 @@ mod test {
         let x: Scalar = Scalar::from_bytes_mod_order(random_bytes);
         let x_bytes = scalar_to_bytes(x); // x_bytes is little-endian
 
-        // Remove old file if it exists
-        std::fs::remove_file("./src/gen_values/x_test.txt").ok();
+        let file_err_msg = "Unable to create or write to file";
+        let private_key_file_name = "x_test.txt";
+        let private_key_file = File::create(private_key_file_name).expect(file_err_msg);
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("./src/gen_values/x_test.txt")
-            .unwrap();
-        file.write_all(&x_bytes).unwrap();
+        let mut private_key_buf = BufWriter::new(private_key_file);
+        let private_key_hex_string = hex::encode(x_bytes);
+        writeln!(private_key_buf, "{private_key_hex_string}").expect(file_err_msg);
+        let _ = private_key_buf.flush();
 
-        // read key from a file
-        let mut file = File::open("./src/gen_values/x_test.txt").unwrap();
-        let mut buffer = vec![0; 32];
-        loop {
-            let bytes_read = file.read(&mut buffer).unwrap();
-            if bytes_read == 0 {
-                break;
+        // read key from file
+        if let Ok(lines) = read_lines(private_key_file_name) {
+            for line in lines {
+                if let Ok(private_key_string_read) = line {
+                    assert_eq!(private_key_string_read, private_key_hex_string);
+                }
             }
-            let d: [u8; 32] = buffer[..bytes_read].try_into().unwrap();
-
-            // Curve Order is 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed
-            // p is 0x40000000000000000000000000000000224698fc094cf91b992d30ed00000001
-            // x can be represented as a single feild element
-            // assert_eq!(Fp::from_repr(x_bytes).unwrap(), Fp::from_repr(d).unwrap());
-            assert_eq!(x_bytes, d);
-            println!("Scalar is {:?}", x);
-            println!("Fp is {:?}", d);
+        } else {
+            assert!(false)
         }
     }
 
     #[test]
-    fn test_read_values() {
-        // Read Commitment
-        let mut c_vec: Vec<AffinePoint> = vec![];
-        let mut c_file = File::open("./src/gen_values/c.txt").unwrap();
-        let mut c_buffer = vec![0; 64];
-        loop {
-            let cbytes = c_file.read(&mut c_buffer).unwrap();
-            if cbytes == 0 {
-                break;
-            }
-            let ctemp: [u8; 64] = c_buffer[..cbytes].try_into().unwrap();
-            let cx: [u8; 32] = ctemp[..32].try_into().unwrap();
-            let cy: [u8; 32] = ctemp[32..64].try_into().unwrap();
-            let c = AffinePoint::coord_to_point(
-                Fe25519::from_repr(cx).unwrap(),
-                Fe25519::from_repr(cy).unwrap(),
-            );
+    fn test_public_key_to_bytes() {
+        let mut rng = thread_rng();
+        let random_bytes: [u8; 32] = rng.gen();
+        let x: Scalar = Scalar::from_bytes_mod_order(random_bytes);
+        let g = constants::RISTRETTO_BASEPOINT_POINT;
+        let p = g * x;
+        let (px, py) = ristretto_to_affine(p);
 
-            assert!(c.is_on_curve());
-            c_vec.push(c);
+        let file_err_msg = "Unable to create or write to file";
+        let public_key_file_name = "p_test.txt";
+        let public_key_file = File::create(public_key_file_name).expect(file_err_msg);
+
+        let mut public_key_buf = BufWriter::new(public_key_file);
+        let pk_x_string = hex::encode(px);
+        let pk_y_string = hex::encode(py);
+        writeln!(public_key_buf, "{pk_x_string} {pk_y_string}").expect(file_err_msg);
+        let _ = public_key_buf.flush();
+
+        // read key from file
+        if let Ok(lines) = read_lines(public_key_file_name) {
+            for line in lines {
+                if let Ok(key_coordinates) = line {
+                    let coordinates: Vec<&str> = key_coordinates.trim().split(' ').collect();
+                    assert_eq!(coordinates.len(), 2);
+                    assert_eq!(String::from(coordinates[0]), pk_x_string);
+                    assert_eq!(String::from(coordinates[1]), pk_y_string);
+
+                    let cx_dec: [u8; 32] = hex::decode(String::from(coordinates[0])).expect("Error").as_slice().try_into().unwrap();
+                    let cy_dec: [u8; 32] = hex::decode(String::from(coordinates[1])).expect("Error").as_slice().try_into().unwrap();
+
+                    let p_dec = AffinePoint::coord_to_point(
+                        Fe25519::from_repr(cx_dec).unwrap(),
+                        Fe25519::from_repr(cy_dec).unwrap(),
+                    );
+
+                    assert!(p_dec.is_on_curve());
+                }
+            }
+        } else {
+            assert!(false)
         }
-        println!("len is {}", c_vec.len());
     }
 
     #[test]
