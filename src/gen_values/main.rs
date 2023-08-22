@@ -1,5 +1,6 @@
-// Usage: cargo r -r gen_vales [number_of_values]
+// Usage: cargo run -r --bin gen_values [number_of_values]
 
+use clap::{Command, Arg};
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -11,8 +12,8 @@ use bp_ed25519::field::Fe25519;
 use bp_ed25519::curve::AffinePoint;
 use rand_07::{self, Rng};
 
-use std::{env, fs::File};
-use std::io::{Write, BufWriter};
+
+use std::{fs::File, io::{Write, BufWriter}};
 use ff::{Field, PrimeField};
 
 
@@ -49,24 +50,30 @@ fn ristretto_to_affine(point: RistrettoPoint) -> ([u8; 32], [u8; 32]) {
 }
 
 fn main() {
+    let cmd = Command::new("Test values generator for MProve-Nova")
+        .bin_name("gen_values")
+        .arg(
+            Arg::new("num_values")
+                .value_name("Number of outputs")
+                .value_parser(clap::value_parser!(u32))
+                .required(true)
+                .long_help("Number of outputs that will be generated in the test data")
+
+        )
+        .after_help("The gen_Values command generates the test data that will be used\
+         to benchmark the performance of MProve-Nova");
+
+    let m = cmd.get_matches();
+    let num_values = m.get_one::<u32>("num_values").unwrap();
     let mut rng = rand_07::thread_rng();
-    let args: Vec<String> = env::args().collect();
-    assert_eq!(args.len(), 3);
-    let num_gen: usize = match args[2].parse() {
-        Ok(num) => num,
-        Err(_) => {
-            println!("Invalid integer argument provided.");
-            return;
-        }
-    };
 
     let file_err_msg = "Unable to create or write to file";
-    let amount_file_name = "a.txt";
-    let private_key_file_name = "x.txt";
-    let commitment_file_name = "c.txt";
-    let public_key_file_name = "p.txt";
-    let public_key_hash_file_name = "hp.txt";
-    let keyimage_file_name = "i.txt";
+    let amount_file_name = format!("a_{num_values}.txt");
+    let private_key_file_name = format!("x_{num_values}.txt");
+    let commitment_file_name = format!("c_{num_values}.txt");
+    let public_key_file_name = format!("p_{num_values}.txt");
+    let public_key_hash_file_name = format!("hp_{num_values}.txt");
+    let keyimage_file_name = format!("i_{num_values}.txt");
 
 
     let amount_file = File::create(amount_file_name).expect(file_err_msg);
@@ -84,9 +91,10 @@ fn main() {
 
     // G, H - curve points for generating outputs and key-images
     let g = constants::RISTRETTO_BASEPOINT_POINT;
+    // Placeholder for the point H which is used to generate Pedersen commitments of the amount
     let h = RistrettoPoint::hash_from_bytes::<Sha512>(g.compress().as_bytes());
 
-    for i in 0..num_gen {
+    for i in 0..(*num_values as usize) {
         // generate random amounts from 2^64 -1
         let a: Scalar = Scalar::from(rng.gen::<u64>());
         // generate blinding factors
