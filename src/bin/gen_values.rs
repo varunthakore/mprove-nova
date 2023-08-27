@@ -34,11 +34,11 @@ fn main() {
 
     let file_err_msg = "Unable to create or write to file";
     let amount_file_name = format!("a_{num_values}.txt");
-    let private_key_file_name = format!("x_{num_values}.txt");
-    let commitment_file_name = format!("c_{num_values}.txt");
-    let public_key_file_name = format!("p_{num_values}.txt");
-    let public_key_hash_file_name = format!("hp_{num_values}.txt");
-    let keyimage_file_name = format!("i_{num_values}.txt");
+    let private_key_file_name = format!("tmp/x_{num_values}.txt");
+    let commitment_file_name = format!("tmp/c_{num_values}.txt");
+    let public_key_file_name = format!("tmp/p_{num_values}.txt");
+    let public_key_hash_file_name = format!("tmp/hp_{num_values}.txt");
+    let keyimage_file_name = format!("tmp/i_{num_values}.txt");
 
     let amount_file = File::create(amount_file_name).expect(file_err_msg);
     let mut amount_buf = BufWriter::new(amount_file);
@@ -125,7 +125,7 @@ mod test {
         let a_bytes = a.as_bytes().to_vec(); // a_bytes is little-endian
 
         let file_err_msg = "Unable to create or write to file";
-        let amount_file_name = "a_test.txt";
+        let amount_file_name = "tmp/a_test.txt";
         let amount_file = File::create(amount_file_name).expect(file_err_msg);
 
         let mut amount_buf = BufWriter::new(amount_file);
@@ -153,7 +153,7 @@ mod test {
         let x_bytes = x.to_bytes(); // x_bytes is little-endian
 
         let file_err_msg = "Unable to create or write to file";
-        let private_key_file_name = "x_test.txt";
+        let private_key_file_name = "tmp/x_test.txt";
         let private_key_file = File::create(private_key_file_name).expect(file_err_msg);
 
         let mut private_key_buf = BufWriter::new(private_key_file);
@@ -183,7 +183,7 @@ mod test {
         let (px, py) = ristretto_to_affine_bytes(p);
 
         let file_err_msg = "Unable to create or write to file";
-        let public_key_file_name = "p_test.txt";
+        let public_key_file_name = "tmp/p_test.txt";
         let public_key_file = File::create(public_key_file_name).expect(file_err_msg);
 
         let mut public_key_buf = BufWriter::new(public_key_file);

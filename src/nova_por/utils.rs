@@ -171,9 +171,9 @@ pub fn read_utxot<F: PrimeField + PrimeFieldBits, AL: Arity<F>, AN: Arity<F>>(
     let empty_leaf_val = vanilla_tree::tree::Leaf::default();
     let mut tree = MerkleTree::new(empty_leaf_val);
 
-    let commitment_file_name = format!("c_{num_iters}.txt");
-    let public_key_file_name = format!("p_{num_iters}.txt");
-    let public_key_hash_file_name = format!("hp_{num_iters}.txt");
+    let commitment_file_name = format!("tmp/c_{num_iters}.txt");
+    let public_key_file_name = format!("tmp/p_{num_iters}.txt");
+    let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
 
     // Read Leaves to Insert
     let c_vec = read_points(commitment_file_name);

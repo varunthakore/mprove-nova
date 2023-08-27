@@ -86,9 +86,9 @@ where
     A12: Arity<F> + Send + Sync,
 {
     pub fn get_iters(num_iters: usize) -> Vec<PORIteration<F, A1, A2, A3, A4, A12>> {
-        let private_key_file_name = format!("x_{num_iters}.txt");
-        let commitment_file_name = format!("c_{num_iters}.txt");
-        let public_key_hash_file_name = format!("hp_{num_iters}.txt");
+        let private_key_file_name = format!("tmp/x_{num_iters}.txt");
+        let commitment_file_name = format!("tmp/c_{num_iters}.txt");
+        let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
 
         let keys: Vec<F> = read_keys::<F>(private_key_file_name.clone());
         let comms = read_points(commitment_file_name);
@@ -437,12 +437,12 @@ mod tests {
 
         let num_iters = 1;
         let file_err_msg = "Unable to create or write to file";
-        // let amount_file_name = format!("a_{num_iters}.txt");
-        let private_key_file_name = format!("x_{num_iters}.txt");
-        let commitment_file_name = format!("c_{num_iters}.txt");
-        let public_key_file_name = format!("p_{num_iters}.txt");
-        let public_key_hash_file_name = format!("hp_{num_iters}.txt");
-        let keyimage_file_name = format!("i_{num_iters}.txt");
+        // let amount_file_name = format!("tmp/a_{num_iters}.txt");
+        let private_key_file_name = format!("tmp/x_{num_iters}.txt");
+        let commitment_file_name = format!("tmp/c_{num_iters}.txt");
+        let public_key_file_name = format!("tmp/p_{num_iters}.txt");
+        let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
+        let keyimage_file_name = format!("tmp/i_{num_iters}.txt");
 
         // let amount_file = File::create(amount_file_name).expect(file_err_msg);
         // let mut amount_buf = BufWriter::new(amount_file);
