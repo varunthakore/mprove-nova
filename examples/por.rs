@@ -1,24 +1,24 @@
 type G1 = pasta_curves::pallas::Point;
 type G2 = pasta_curves::vesta::Point;
-use std::time::Instant;
-use generic_array::typenum::{U1, U2, U3, U4, U12};
 use clap::{Arg, Command};
 use flate2::{write::ZlibEncoder, Compression};
+use generic_array::typenum::{U1, U12, U2, U3, U4};
 use mprove_nova::nova_por::circuit::PORIteration;
 use nova_snark::{
     traits::{circuit::TrivialTestCircuit, Group},
     CompressedSNARK, PublicParams, RecursiveSNARK,
 };
+use std::time::Instant;
 
 fn main() {
     let cmd = Command::new("MProve-Nova proof generation and verification")
-    .bin_name("por")
-    .arg(
-        Arg::new("num_of_iters")
-            .value_name("Number of POR Iterations")
-            .default_value("1")
-            .value_parser(clap::value_parser!(usize))
-    );
+        .bin_name("por")
+        .arg(
+            Arg::new("num_of_iters")
+                .value_name("Number of POR Iterations")
+                .default_value("1")
+                .value_parser(clap::value_parser!(usize)),
+        );
     let m = cmd.get_matches();
     let m = *m.get_one::<usize>("num_of_iters").unwrap();
 
@@ -152,5 +152,4 @@ fn main() {
         proving_time
     );
     println!("Total verification time: {:?}", verification_time);
-
 }

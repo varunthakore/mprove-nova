@@ -1,10 +1,10 @@
-use merkle_trees::index_tree;
-use merkle_trees::index_tree::tree::IndexTree;
-use neptune::{Strength, Arity};
-use neptune::sponge::vanilla::{SpongeTrait, Sponge};
-use ff::{PrimeField, PrimeFieldBits};
 use bellperson_ed25519::curve::AffinePoint;
 use bellperson_ed25519::field::Fe25519;
+use ff::{PrimeField, PrimeFieldBits};
+use merkle_trees::index_tree;
+use merkle_trees::index_tree::tree::IndexTree;
+use neptune::sponge::vanilla::{Sponge, SpongeTrait};
+use neptune::{Arity, Strength};
 
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -15,9 +15,9 @@ use itertools::izip;
 
 use std::cmp::PartialOrd;
 
+use merkle_trees::hash::vanilla::hash;
 use merkle_trees::vanilla_tree;
 use merkle_trees::vanilla_tree::tree::MerkleTree;
-use merkle_trees::hash::vanilla::hash;
 
 pub const KIT_HEIGHT: usize = 32;
 pub const DST_HEIGHT: usize = 32;
@@ -26,7 +26,9 @@ pub const BLOCK_HEIGHT: u128 = 1001; // Insert Block Height for POR
 
 // Code from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path>, {
+where
+    P: AsRef<Path>,
+{
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
 }
@@ -41,7 +43,12 @@ pub fn point_to_slice<F: PrimeField>(point: &AffinePoint) -> [F; 4] {
     let y_lo = u128::from_le_bytes(y_bytes[..16].try_into().unwrap());
     let y_hi = u128::from_le_bytes(y_bytes[16..].try_into().unwrap());
 
-    vec![x_lo, x_hi, y_lo, y_hi].into_iter().map(|a| F::from_u128(a)).collect::<Vec<_>>().try_into().unwrap()
+    vec![x_lo, x_hi, y_lo, y_hi]
+        .into_iter()
+        .map(|a| F::from_u128(a))
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
 pub fn slice_to_point<F: PrimeField<Repr = [u8; 32]>>(a: [F; 4]) -> AffinePoint {
@@ -60,7 +67,9 @@ pub fn slice_to_point<F: PrimeField<Repr = [u8; 32]>>(a: [F; 4]) -> AffinePoint 
     AffinePoint { x, y }
 }
 
-pub fn read_keys<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(filename: String) -> Vec<F> {
+pub fn read_keys<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(
+    filename: String,
+) -> Vec<F> {
     assert!(F::CAPACITY > 252);
     let mut keys: Vec<F> = vec![];
 
@@ -86,9 +95,17 @@ pub fn read_points(filename: String) -> Vec<AffinePoint> {
             if let Ok(coordinates_string) = line {
                 let coordinates: Vec<&str> = coordinates_string.trim().split(' ').collect();
                 assert_eq!(coordinates.len(), 2);
-                
-                let cx: [u8; 32] = hex::decode(String::from(coordinates[0])).expect("Error").as_slice().try_into().unwrap();
-                let cy: [u8; 32] = hex::decode(String::from(coordinates[1])).expect("Error").as_slice().try_into().unwrap();
+
+                let cx: [u8; 32] = hex::decode(String::from(coordinates[0]))
+                    .expect("Error")
+                    .as_slice()
+                    .try_into()
+                    .unwrap();
+                let cy: [u8; 32] = hex::decode(String::from(coordinates[1]))
+                    .expect("Error")
+                    .as_slice()
+                    .try_into()
+                    .unwrap();
 
                 let p = AffinePoint {
                     x: Fe25519::from_bytes_le(&cx),
@@ -103,21 +120,19 @@ pub fn read_points(filename: String) -> Vec<AffinePoint> {
     points
 }
 
-pub fn read_kit<F: PrimeField + PrimeFieldBits + PartialOrd, AL:Arity<F>, AN:Arity<F>>() -> IndexTree<F, KIT_HEIGHT, AL, AN> {
+pub fn read_kit<F: PrimeField + PrimeFieldBits + PartialOrd, AL: Arity<F>, AN: Arity<F>>(
+) -> IndexTree<F, KIT_HEIGHT, AL, AN> {
     IndexTree::new(index_tree::tree::Leaf::default())
 }
 
-pub fn read_dst<F, AX, AL, AN>(keys_filename: String) ->
-(
-    Vec<IndexTree<F, DST_HEIGHT, AL, AN>>,
-    Vec<F>,
-    Vec<F>
-)
+pub fn read_dst<F, AX, AL, AN>(
+    keys_filename: String,
+) -> (Vec<IndexTree<F, DST_HEIGHT, AL, AN>>, Vec<F>, Vec<F>)
 where
     F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd,
     AX: Arity<F>,
     AL: Arity<F>,
-    AN: Arity<F>
+    AN: Arity<F>,
 {
     let mut rng = rand::thread_rng();
     let x_hash_params = Sponge::<F, AX>::api_constants(Strength::Standard);
@@ -150,7 +165,9 @@ where
     (trees, salts, hash_output_roots)
 }
 
-pub fn read_utxot<F: PrimeField + PrimeFieldBits,  AL:Arity<F>, AN:Arity<F>>(num_iters: usize) -> MerkleTree<F, UTXO_HEIGHT, AL, AN> {
+pub fn read_utxot<F: PrimeField + PrimeFieldBits, AL: Arity<F>, AN: Arity<F>>(
+    num_iters: usize,
+) -> MerkleTree<F, UTXO_HEIGHT, AL, AN> {
     let empty_leaf_val = vanilla_tree::tree::Leaf::default();
     let mut tree = MerkleTree::new(empty_leaf_val);
 
@@ -219,7 +236,7 @@ mod tests {
         loop {
             let y = Fe25519::random(&mut rng);
             let y_sq = &y.square();
-            let x_sq = (y_sq - &Fe25519::one()) * (d_fe*y_sq + Fe25519::one()).invert().unwrap();
+            let x_sq = (y_sq - &Fe25519::one()) * (d_fe * y_sq + Fe25519::one()).invert().unwrap();
 
             let x = x_sq.sqrt();
             if bool::from(x.is_some()) {

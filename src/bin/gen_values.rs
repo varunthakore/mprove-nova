@@ -1,16 +1,17 @@
 // Usage: cargo run -r --bin gen_values [number_of_values]
 
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 
-use sha2::Sha512;
 use rand_07;
+use sha2::Sha512;
 
-
-use std::{fs::File, io::{Write, BufWriter}};
-use mprove_nova::{ristretto_to_affine_bytes, gen_utxo_witness, utxo_from_witness};
-
+use mprove_nova::{gen_utxo_witness, ristretto_to_affine_bytes, utxo_from_witness};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+};
 
 fn main() {
     let cmd = Command::new("Test values generator for MProve-Nova")
@@ -20,11 +21,12 @@ fn main() {
                 .value_name("Number of outputs")
                 .value_parser(clap::value_parser!(u32))
                 .required(true)
-                .long_help("Number of outputs that will be generated in the test data")
-
+                .long_help("Number of outputs that will be generated in the test data"),
         )
-        .after_help("The gen_Values command generates the test data that will be used\
-         to benchmark the performance of MProve-Nova");
+        .after_help(
+            "The gen_Values command generates the test data that will be used\
+         to benchmark the performance of MProve-Nova",
+        );
 
     let m = cmd.get_matches();
     let num_values = m.get_one::<u32>("num_values").unwrap();
@@ -37,7 +39,6 @@ fn main() {
     let public_key_file_name = format!("p_{num_values}.txt");
     let public_key_hash_file_name = format!("hp_{num_values}.txt");
     let keyimage_file_name = format!("i_{num_values}.txt");
-
 
     let amount_file = File::create(amount_file_name).expect(file_err_msg);
     let mut amount_buf = BufWriter::new(amount_file);
@@ -79,13 +80,19 @@ fn main() {
 
         // Write H_P
         let (hpx, hpy) = ristretto_to_affine_bytes(utxo_info.public_key_hash);
-        writeln!(public_key_hash_buf, "{} {}", hex::encode(hpx), hex::encode(hpy)).expect(file_err_msg);
+        writeln!(
+            public_key_hash_buf,
+            "{} {}",
+            hex::encode(hpx),
+            hex::encode(hpy)
+        )
+        .expect(file_err_msg);
 
         // Write Key Images
         let (ix, iy) = ristretto_to_affine_bytes(utxo_info.key_image);
         writeln!(keyimage_buf, "{} {}", hex::encode(ix), hex::encode(iy)).expect(file_err_msg);
 
-       println!("Value with index {i} generated");
+        println!("Value with index {i} generated");
     }
     println!("Values generation complete!");
 }
@@ -93,18 +100,20 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{fs::File, io};
-    use std::io::BufRead;
-    use std::path::Path;
-    use bellperson_ed25519::curve::{Ed25519Curve, AffinePoint};
+    use bellperson_ed25519::curve::{AffinePoint, Ed25519Curve};
     use bellperson_ed25519::field::Fe25519;
     use curve25519_dalek::scalar::Scalar;
     use num_bigint::BigUint;
     use rand_07::{thread_rng, Rng};
+    use std::io::BufRead;
+    use std::path::Path;
+    use std::{fs::File, io};
 
     // Code from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
     fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-    where P: AsRef<Path>, {
+    where
+        P: AsRef<Path>,
+    {
         let file = File::open(filename)?;
         Ok(io::BufReader::new(file).lines())
     }
@@ -192,8 +201,16 @@ mod test {
                     assert_eq!(String::from(coordinates[0]), pk_x_string);
                     assert_eq!(String::from(coordinates[1]), pk_y_string);
 
-                    let cx: [u8; 32] = hex::decode(String::from(coordinates[0])).expect("Error").as_slice().try_into().unwrap();
-                    let cy: [u8; 32] = hex::decode(String::from(coordinates[1])).expect("Error").as_slice().try_into().unwrap();
+                    let cx: [u8; 32] = hex::decode(String::from(coordinates[0]))
+                        .expect("Error")
+                        .as_slice()
+                        .try_into()
+                        .unwrap();
+                    let cy: [u8; 32] = hex::decode(String::from(coordinates[1]))
+                        .expect("Error")
+                        .as_slice()
+                        .try_into()
+                        .unwrap();
 
                     let p_dec = AffinePoint {
                         x: Fe25519::from_bytes_le(&cx),
@@ -216,13 +233,10 @@ mod test {
             random_bytes[31] = 1u8; // Make leading byte non-zero
         }
         let x = BigUint::from_bytes_le(&random_bytes);
-        
+
         let b = Ed25519Curve::basepoint();
         let point = Ed25519Curve::scalar_multiplication(&b, &x);
-        let (px, py) = (
-            point.x.to_bytes_le(),
-            point.y.to_bytes_le(),
-        );
+        let (px, py) = (point.x.to_bytes_le(), point.y.to_bytes_le());
 
         let x_ris: Scalar = Scalar::from_bytes_mod_order(x.to_bytes_le().try_into().unwrap());
         let b_ris = RISTRETTO_BASEPOINT_POINT;
