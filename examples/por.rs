@@ -54,7 +54,7 @@ fn main() {
         pp.num_variables().1
     );
 
-    let primary_circuit_sequence = C1::get_iters()[..m].to_vec(); // select m iterations
+    let primary_circuit_sequence = C1::get_iters(m); // select m iterations
 
     let z0_primary = C1::get_z0(&primary_circuit_sequence[0]);
     let z0_secondary = vec![<G2 as Group>::Scalar::zero()];

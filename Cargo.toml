@@ -6,15 +6,14 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bellperson = "0.25"
+bellperson = { version = "0.25.0", default-features = false }
 neptune = "10.0.0"
 curve25519-dalek = { git = "https://github.com/varunthakore/curve25519-dalek.git", branch = "release/3.2" }
 sha2 = { version = "0.9", default-features = false }
 sha3 = { version = "0.9", default-features = false }
-ff = "0.13"
-bp-ed25519 = { git = "https://github.com/avras/bp-ed25519.git"}
+ff = "0.13.0"
+bellperson-ed25519 = "0.3.0"
 merkle-trees = { git = "https://github.com/varunthakore/merkle-trees.git" }
-crypto-bigint = "0.5.2"
 num-bigint = "0.4.3"
 nova-snark = "0.22.0"
 itertools = "0.11.0"
@@ -29,7 +28,3 @@ clap = "4.1.8"
 flate2 = "1.0.25"
 pasta_curves = "0.5.1"
 generic-array = "0.14.6"
-
-[[bin]]
-name = "gen_values"
-path = "src/gen_values/main.rs"

@@ -12,19 +12,29 @@ use neptune::{Strength, Arity};
 use ff::{PrimeField, PrimeFieldBits};
 use nova_snark::traits::circuit::StepCircuit;
 
-use super::utils::{vec_to_point, point_to_vec};
-use bp_ed25519::curve::{AffinePoint, Ed25519Curve};
-use bp_ed25519::nonnative::circuit::AllocatedAffinePoint;
+use crate::nova_por::utils::read_points;
+
+use super::utils::{slice_to_point, point_to_slice};
+use bellperson_ed25519::curve::{AffinePoint, Ed25519Curve};
+use bellperson_ed25519::circuit::AllocatedAffinePoint;
 use merkle_trees::hash::circuit::hash_circuit;
 use merkle_trees::index_tree;
 use merkle_trees::index_tree::tree::{idx_to_bits, IndexTree};
 use merkle_trees::vanilla_tree::tree::MerkleTree;
 use merkle_trees::vanilla_tree;
 
-use super::utils::{read_comm, read_dst, read_hash_addr, read_keys, read_kit, read_utxot, get_utxo_leaf, DST_HEIGHT, KIT_HEIGHT, UTXO_HEIGHT, BLOCK_HEIGHT};
+use super::utils::{read_dst, read_keys, read_kit, read_utxot, get_utxo_leaf, DST_HEIGHT, KIT_HEIGHT, UTXO_HEIGHT, BLOCK_HEIGHT};
 
 #[derive(Clone, Debug)]
-pub struct PORIteration<F: PrimeField + PrimeFieldBits, A1: Arity<F> + Send + Sync, A2: Arity<F> + Send + Sync, A3: Arity<F> + Send + Sync, A4: Arity<F> + Send + Sync, A12: Arity<F> + Send + Sync> {
+pub struct PORIteration<F, A1, A2, A3, A4, A12>
+where
+    F: PrimeField + PrimeFieldBits,
+    A1: Arity<F> + Send + Sync,
+    A2: Arity<F> + Send + Sync,
+    A3: Arity<F> + Send + Sync,
+    A4: Arity<F> + Send + Sync,
+    A12: Arity<F> + Send + Sync
+{
     priv_key: F,
     c: AffinePoint,
     hp: AffinePoint,
@@ -73,12 +83,16 @@ where
     A4: Arity<F> + Send + Sync, 
     A12: Arity<F> + Send + Sync,
 {
-     pub fn get_iters() -> Vec<PORIteration<F, A1, A2, A3, A4, A12>>{
-        let keys: Vec<F> = read_keys::<F>();
-        let comms = read_comm();
-        let hash_ps = read_hash_addr();
-        let (dsts, salts, hash_dst_roots) = read_dst::<F, A2, A3, A2>();
-        let utxot = read_utxot();
+     pub fn get_iters(num_iters: usize) -> Vec<PORIteration<F, A1, A2, A3, A4, A12>>{
+        let private_key_file_name = format!("x_{num_iters}.txt");
+        let commitment_file_name = format!("c_{num_iters}.txt");
+        let public_key_hash_file_name = format!("hp_{num_iters}.txt");
+
+        let keys: Vec<F> = read_keys::<F>(private_key_file_name.clone());
+        let comms = read_points(commitment_file_name);
+        let hash_ps = read_points(public_key_hash_file_name);
+        let (dsts, salts, hash_dst_roots) = read_dst::<F, A2, A3, A2>(private_key_file_name);
+        let utxot = read_utxot(num_iters);
         let kit = read_kit();
     
         assert_eq!(keys.len(), comms.len());
@@ -91,8 +105,8 @@ where
             iters.push(
                 PORIteration {
                     priv_key: keys[i].clone(),
-                    c: comms[i],
-                    hp: hash_ps[i],
+                    c: comms[i].clone(),
+                    hp: hash_ps[i].clone(),
                     dst: dsts[i].clone(),
                     r: salts[i],
                     hash_dst_root: hash_dst_roots[i].clone(),
@@ -110,8 +124,8 @@ where
     pub fn get_z0(&self) -> Vec<F> {
         let mut z0 = vec![self.kit.root, self.utxot.root, F::ZERO];
         let zero_comm = Ed25519Curve::basepoint();
-        let zero_comm_vec: Vec<F> = point_to_vec(zero_comm);
-        z0.extend(zero_comm_vec);
+        let zero_comm_slice: [F; 4] = point_to_slice(&zero_comm);
+        z0.extend(zero_comm_slice);
         assert_eq!(z0.len(), 7);
         z0
     }
@@ -139,7 +153,7 @@ where
         let b = Ed25519Curve::basepoint();
         let b_alloc: AllocatedAffinePoint<F> = AllocatedAffinePoint::alloc_affine_point(
             &mut cs.namespace(|| "allocate base point"),
-            b,
+            &b,
         )?;
 
         // Alloc priv_key
@@ -199,13 +213,10 @@ where
         );
 
         // Calculate one-time address P = xG
-        let p: AllocatedAffinePoint<F> =
-            AllocatedAffinePoint::ed25519_scalar_multiplication_m_bit(
-                b_alloc.clone(),
-                &mut cs.namespace(|| "calculate p"),
-                x_vec.clone(),
-                4 // 4 bit lookup
-            )?;
+        let p: AllocatedAffinePoint<F> = b_alloc.clone().ed25519_scalar_multiplication(
+            &mut cs.namespace(|| "calculate p"),
+            x_vec.clone(),
+        )?;
 
         // Check UTXO Tree root is same
         let alloc_utxot_root = AllocatedNum::alloc(&mut cs.namespace(|| "alloc UTXOT root"), || Ok(self.utxot.root))?;
@@ -224,7 +235,7 @@ where
         let utxo_root_var: AllocatedNum<F> =
             AllocatedNum::alloc(cs.namespace(|| "root"), || Ok(self.utxot.root))?;
         let utxo_leaf: Vec<F> =
-            get_utxo_leaf::<F, A12>(self.c, p.get_point(), self.hp).val;
+            get_utxo_leaf::<F, A12>(self.c.clone(), p.get_point(), self.hp.clone()).val;
         let utxo_leaf_var: Vec<AllocatedNum<F>> = utxo_leaf
             .into_iter()
             .enumerate()
@@ -266,15 +277,12 @@ where
         // Calculate I = x * H(P)
         let hp_alloc = AllocatedAffinePoint::alloc_affine_point(
             &mut cs.namespace(|| "allocate H(P)"),
-            self.hp,
+            &self.hp,
         )?;
-        let key_img: AllocatedAffinePoint<F> =
-            AllocatedAffinePoint::ed25519_scalar_multiplication_m_bit(
-                hp_alloc.clone(),
-                &mut cs.namespace(|| "calculate key image"),
-                x_vec,
-                4 // 4 bit lookup
-            )?;
+        let key_img: AllocatedAffinePoint<F> = hp_alloc.clone().ed25519_scalar_multiplication(
+            &mut cs.namespace(|| "calculate key image"),
+            x_vec,
+        )?;
         
         // Check KIT Root is same
         let alloc_kit_root = AllocatedNum::alloc(&mut cs.namespace(|| "alloc KIT root"), || Ok(self.kit.root))?;
@@ -286,8 +294,8 @@ where
         );
 
         // Check I is absent in KIT
-        let key_img_vec: Vec<F> = point_to_vec(key_img.get_point());
-        let key_img_alloc: Vec<AllocatedNum<F>> = key_img_vec
+        let key_img_slice: [F; 4] = point_to_slice(&key_img.get_point());
+        let key_img_alloc: Vec<AllocatedNum<F>> = key_img_slice
             .into_iter()
             .enumerate()
             .map(|(i, s)| {
@@ -326,28 +334,28 @@ where
             hash_x.clone(),
         )?;
 
-        // Sum commitments to ammount
-        let basepoint_vec: Vec<F> = point_to_vec(Ed25519Curve::basepoint());
-        let mut vec = vec![];
-        vec.push(z[3].get_value().unwrap_or(basepoint_vec[0]));
-        vec.push(z[4].get_value().unwrap_or(basepoint_vec[1]));
-        vec.push(z[5].get_value().unwrap_or(basepoint_vec[2]));
-        vec.push(z[6].get_value().unwrap_or(basepoint_vec[3]));
-        let c_total = vec_to_point(vec);
+        // Sum commitments to amount
+        let basepoint_slice: [F; 4] = point_to_slice(&Ed25519Curve::basepoint());
+        let mut v = vec![];
+        v.push(z[3].get_value().unwrap_or(basepoint_slice[0]));
+        v.push(z[4].get_value().unwrap_or(basepoint_slice[1]));
+        v.push(z[5].get_value().unwrap_or(basepoint_slice[2]));
+        v.push(z[6].get_value().unwrap_or(basepoint_slice[3]));
+        let c_total = slice_to_point(v.as_slice().try_into().unwrap());
         let alloc_c_total = AllocatedAffinePoint::alloc_affine_point(
             &mut cs.namespace(|| "Alloc c_total"), 
-            c_total
+            &c_total
         )?;
         let alloc_c = AllocatedAffinePoint::alloc_affine_point(
             &mut cs.namespace(|| "alloc c"), 
-            self.c
+            &self.c
         )?;
         let c_new_total = AllocatedAffinePoint::ed25519_point_addition(
             &mut cs.namespace(|| "Add commitments"), 
             &alloc_c, 
         &alloc_c_total
         )?;
-        let c_new_total_vec: Vec<AllocatedNum<F>> = point_to_vec(c_new_total.get_point())
+        let c_new_total_vec: Vec<AllocatedNum<F>> = point_to_slice(&c_new_total.get_point())
             .into_iter()
             .enumerate()
             .map(|(i, s)| {
@@ -379,31 +387,94 @@ where
         assert_eq!(z[1], self.utxot.root);
         
         let mut out  = vec![self.kit.root, self.utxot.root, self.hash_dst_root];
-        let vec: Vec<F> = vec![z[3], z[4], z[5], z[6]];
-        let c_total = vec_to_point(vec);
-        let c_total_new  = c_total + self.c;
-        let c_total_new_vec: Vec<F> = point_to_vec(c_total_new);
-        out.extend(c_total_new_vec);
+        let c_total = slice_to_point(z[3..7].try_into().unwrap());
+        let c_total_new  = c_total + self.c.clone();
+        let c_total_new_slice: [F; 4] = point_to_slice(&c_total_new);
+        out.extend(c_total_new_slice);
         out 
     }
 }
 
 #[cfg(test)]
 mod tests {
+use std::{fs::File, io::{Write, BufWriter}};
+
+    use crate::{gen_utxo_witness, utxo_from_witness, ristretto_to_affine_bytes};
+
     use super::*;
     use bellperson::gadgets::test::TestConstraintSystem;
+    use curve25519_dalek::{constants::RISTRETTO_BASEPOINT_POINT, ristretto::RistrettoPoint};
     use pasta_curves::Fp;
     use generic_array::typenum::{U1, U2, U3, U4, U12};
+    use sha2::Sha512;
 
     #[test]
     fn test_step() {
         let mut cs = TestConstraintSystem::<Fp>::new();
 
-        let iters: Vec<PORIteration<Fp, U1, U2, U3, U4, U12>> = PORIteration::get_iters();
+        let num_iters = 1;
+        let file_err_msg = "Unable to create or write to file";
+        // let amount_file_name = format!("a_{num_iters}.txt");
+        let private_key_file_name = format!("x_{num_iters}.txt");
+        let commitment_file_name = format!("c_{num_iters}.txt");
+        let public_key_file_name = format!("p_{num_iters}.txt");
+        let public_key_hash_file_name = format!("hp_{num_iters}.txt");
+        let keyimage_file_name = format!("i_{num_iters}.txt");
 
-        for i in 0..1 {
+
+        // let amount_file = File::create(amount_file_name).expect(file_err_msg);
+        // let mut amount_buf = BufWriter::new(amount_file);
+        let private_key_file = File::create(private_key_file_name).expect(file_err_msg);
+        let mut private_key_buf = BufWriter::new(private_key_file);
+        let commitment_file = File::create(commitment_file_name).expect(file_err_msg);
+        let mut commitment_buf = BufWriter::new(commitment_file);
+        let public_key_file = File::create(public_key_file_name).expect(file_err_msg);
+        let mut public_key_buf = BufWriter::new(public_key_file);
+        let public_key_hash_file = File::create(public_key_hash_file_name).expect(file_err_msg);
+        let mut public_key_hash_buf = BufWriter::new(public_key_hash_file);
+        let keyimage_file = File::create(keyimage_file_name).expect(file_err_msg);
+        let mut keyimage_buf = BufWriter::new(keyimage_file);
+
+        let g = RISTRETTO_BASEPOINT_POINT;
+        // Placeholder for the point H which is used to generate Pedersen commitments of the amount
+        let h = RistrettoPoint::hash_from_bytes::<Sha512>(g.compress().as_bytes());
+
+        let mut rng = rand_07::thread_rng();
+        
+        for _i in 0..num_iters {
+            let wit = gen_utxo_witness(&mut rng);
+            let utxo_info = utxo_from_witness(&wit, &h);
+
+            let x_bytes = wit.private_key.as_bytes();
+            writeln!(private_key_buf, "{}", hex::encode(x_bytes)).expect(file_err_msg);
+
+            // Write commitments
+            let (cx, cy) = ristretto_to_affine_bytes(utxo_info.amount_commitment);
+            writeln!(commitment_buf, "{} {}", hex::encode(cx), hex::encode(cy)).expect(file_err_msg);
+
+            // Write P
+            let (px, py) = ristretto_to_affine_bytes(utxo_info.public_key);
+            writeln!(public_key_buf, "{} {}", hex::encode(px), hex::encode(py)).expect(file_err_msg);
+
+            // Write H_P
+            let (hpx, hpy) = ristretto_to_affine_bytes(utxo_info.public_key_hash);
+            writeln!(public_key_hash_buf, "{} {}", hex::encode(hpx), hex::encode(hpy)).expect(file_err_msg);
+
+            // Write Key Images
+            let (ix, iy) = ristretto_to_affine_bytes(utxo_info.key_image);
+            writeln!(keyimage_buf, "{} {}", hex::encode(ix), hex::encode(iy)).expect(file_err_msg);
+        }
+        let _ = private_key_buf.flush();
+        let _ = commitment_buf.flush();
+        let _ = public_key_buf.flush();
+        let _ = public_key_hash_buf.flush();
+        let _ = keyimage_buf.flush();
+
+        let iters: Vec<PORIteration<Fp, U1, U2, U3, U4, U12>> = PORIteration::get_iters(num_iters);
+
+        for i in 0..num_iters {
             let mut z_in: Vec<Fp> = vec![iters[i].kit.root.clone(), iters[i].utxot.root.clone(), iters[i].hash_dst_root];
-            let basept: Vec<Fp> = point_to_vec(Ed25519Curve::basepoint());
+            let basept: [Fp; 4] = point_to_slice(&Ed25519Curve::basepoint());
             z_in.extend(basept);
             let alloc_z_in: Vec<AllocatedNum<Fp>> = z_in.iter().enumerate().map(|(j,v)| 
                 AllocatedNum::alloc(cs.namespace(|| format!("{i} : alloc input {j}")), || Ok(*v)).unwrap()
