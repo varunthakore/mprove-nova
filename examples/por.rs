@@ -22,14 +22,15 @@ fn main() {
     let m = cmd.get_matches();
     let m = *m.get_one::<usize>("num_of_iters").unwrap();
 
-    println!("MProve-Nova iterations");
-    println!("=========================================================");
-
     type C1 = PORIteration<<G1 as Group>::Scalar, U1, U2, U3, U4, U12>;
     type C2 = TrivialTestCircuit<<G2 as Group>::Scalar>;
     let circuit_primary: C1 = PORIteration::default();
     let circuit_secondary: C2 = TrivialTestCircuit::default();
 
+    let primary_circuit_sequence = C1::get_iters(m); // select m iterations
+
+    println!("MProve-Nova iterations");
+    println!("=========================================================");
     let param_gen_timer = Instant::now();
     println!("Producing public parameters...");
     let pp = PublicParams::<G1, G2, C1, C2>::setup(circuit_primary, circuit_secondary.clone());
@@ -53,8 +54,6 @@ fn main() {
         "Number of variables per step (secondary circuit): {}",
         pp.num_variables().1
     );
-
-    let primary_circuit_sequence = C1::get_iters(m); // select m iterations
 
     let z0_primary = C1::get_z0(&primary_circuit_sequence[0]);
     let z0_secondary = vec![<G2 as Group>::Scalar::zero()];

@@ -166,14 +166,12 @@ where
 }
 
 pub fn read_utxot<F: PrimeField + PrimeFieldBits, AL: Arity<F>, AN: Arity<F>>(
-    num_iters: usize,
+    commitment_file_name: String,
+    public_key_file_name: String,
+    public_key_hash_file_name: String,
 ) -> MerkleTree<F, UTXO_HEIGHT, AL, AN> {
     let empty_leaf_val = vanilla_tree::tree::Leaf::default();
     let mut tree = MerkleTree::new(empty_leaf_val);
-
-    let commitment_file_name = format!("tmp/c_{num_iters}.txt");
-    let public_key_file_name = format!("tmp/p_{num_iters}.txt");
-    let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
 
     // Read Leaves to Insert
     let c_vec = read_points(commitment_file_name);

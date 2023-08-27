@@ -1,4 +1,6 @@
 use std::marker::PhantomData;
+use std::path::Path;
+use std::process::exit;
 
 use bellperson::gadgets::boolean::AllocatedBit;
 use bellperson::{
@@ -88,13 +90,34 @@ where
     pub fn get_iters(num_iters: usize) -> Vec<PORIteration<F, A1, A2, A3, A4, A12>> {
         let private_key_file_name = format!("tmp/x_{num_iters}.txt");
         let commitment_file_name = format!("tmp/c_{num_iters}.txt");
+        let public_key_file_name = format!("tmp/p_{num_iters}.txt");
         let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
 
+        let required_files = vec![
+            &private_key_file_name,
+            &commitment_file_name,
+            &public_key_file_name,
+            &public_key_hash_file_name,
+        ];
+
+        if required_files
+            .iter()
+            .map(|path| Path::new(path).is_file())
+            .any(|x| x == false)
+        {
+            println!("Values files missing. Please run gen_values before running this example");
+            exit(1);
+        }
+
         let keys: Vec<F> = read_keys::<F>(private_key_file_name.clone());
-        let comms = read_points(commitment_file_name);
-        let hash_ps = read_points(public_key_hash_file_name);
+        let comms = read_points(commitment_file_name.clone());
+        let hash_ps = read_points(public_key_hash_file_name.clone());
         let (dsts, salts, hash_dst_roots) = read_dst::<F, A2, A3, A2>(private_key_file_name);
-        let utxot = read_utxot(num_iters);
+        let utxot = read_utxot(
+            commitment_file_name,
+            public_key_file_name,
+            public_key_hash_file_name,
+        );
         let kit = read_kit();
 
         assert_eq!(keys.len(), comms.len());
