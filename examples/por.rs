@@ -33,7 +33,7 @@ fn main() {
     println!("=========================================================");
     let param_gen_timer = Instant::now();
     println!("Producing public parameters...");
-    let pp = PublicParams::<G1, G2, C1, C2>::setup(circuit_primary, circuit_secondary.clone());
+    let pp = PublicParams::<G1, G2, C1, C2>::setup(&circuit_primary, &circuit_secondary);
 
     let param_gen_time = param_gen_timer.elapsed();
     println!("PublicParams::setup, took {:?} ", param_gen_time);
@@ -110,8 +110,8 @@ fn main() {
     let start = Instant::now();
     type EE1 = nova_snark::provider::ipa_pc::EvaluationEngine<G1>;
     type EE2 = nova_snark::provider::ipa_pc::EvaluationEngine<G2>;
-    type S1 = nova_snark::spartan::RelaxedR1CSSNARK<G1, EE1>;
-    type S2 = nova_snark::spartan::RelaxedR1CSSNARK<G2, EE2>;
+    type S1 = nova_snark::spartan::snark::RelaxedR1CSSNARK<G1, EE1>;
+    type S2 = nova_snark::spartan::snark::RelaxedR1CSSNARK<G2, EE2>;
 
     let res = CompressedSNARK::<_, _, _, _, S1, S2>::prove(&pp, &pk, &recursive_snark);
     println!(

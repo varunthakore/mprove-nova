@@ -1,5 +1,5 @@
-use bellperson_ed25519::curve::AffinePoint;
-use bellperson_ed25519::field::Fe25519;
+use bellpepper_ed25519::curve::AffinePoint;
+use bellpepper_ed25519::field::Fe25519;
 use ff::{PrimeField, PrimeFieldBits};
 use merkle_trees::index_tree;
 use merkle_trees::index_tree::tree::IndexTree;

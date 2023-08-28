@@ -100,8 +100,8 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
-    use bellperson_ed25519::curve::{AffinePoint, Ed25519Curve};
-    use bellperson_ed25519::field::Fe25519;
+    use bellpepper_ed25519::curve::{AffinePoint, Ed25519Curve};
+    use bellpepper_ed25519::field::Fe25519;
     use curve25519_dalek::scalar::Scalar;
     use num_bigint::BigUint;
     use rand_07::{thread_rng, Rng};

@@ -1,6 +1,6 @@
 pub mod nova_por;
 
-use bellperson_ed25519::{curve::AffinePoint, field::Fe25519};
+use bellpepper_ed25519::{curve::AffinePoint, field::Fe25519};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
