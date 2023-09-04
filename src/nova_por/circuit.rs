@@ -40,10 +40,11 @@ where
 {
     priv_key: F,
     c: AffinePoint,
+    c_blind: AffinePoint,
     hp: AffinePoint,
     dst: IndexTree<F, DST_HEIGHT, A3, A2>,
     r: F,
-    _hash_dst_root: F, // H(r, output_dst_root)
+    // _hash_dst_root: F, // H(r, output_dst_root)
     kit: IndexTree<F, KIT_HEIGHT, A3, A2>,
     utxot: MerkleTree<F, UTXO_HEIGHT, A12, A2>,
     utxo_idx: F,
@@ -64,10 +65,11 @@ where
         Self {
             priv_key: F::ZERO,
             c: Ed25519Curve::basepoint(),
+            c_blind: Ed25519Curve::basepoint(),
             hp: Ed25519Curve::basepoint(),
             dst: IndexTree::new(index_tree::tree::Leaf::default()),
             r: F::ZERO,
-            _hash_dst_root: F::ZERO,
+            // _hash_dst_root: F::ZERO,
             kit: IndexTree::new(index_tree::tree::Leaf::default()),
             utxot: MerkleTree::new(vanilla_tree::tree::Leaf::default()),
             utxo_idx: F::ZERO,
@@ -89,12 +91,14 @@ where
     pub fn get_iters(num_iters: usize) -> Vec<PORIteration<F, A1, A2, A3, A4, A12>> {
         let private_key_file_name = format!("tmp/x_{num_iters}.txt");
         let commitment_file_name = format!("tmp/c_{num_iters}.txt");
+        let commitment_blind_file_name = format!("tmp/c_blind_{num_iters}.txt");
         let public_key_file_name = format!("tmp/p_{num_iters}.txt");
         let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
 
         let required_files = vec![
             &private_key_file_name,
             &commitment_file_name,
+            &commitment_blind_file_name,
             &public_key_file_name,
             &public_key_hash_file_name,
         ];
@@ -110,8 +114,9 @@ where
 
         let keys: Vec<F> = read_keys::<F>(private_key_file_name.clone());
         let comms = read_points(commitment_file_name.clone());
+        let comms_blind = read_points(commitment_blind_file_name.clone());
         let hash_ps = read_points(public_key_hash_file_name.clone());
-        let (dsts, salts, hash_dst_roots) = read_dst::<F, A2, A3, A2>(private_key_file_name);
+        let (dsts, salts, _hash_dst_roots) = read_dst::<F, A2, A3, A2>(private_key_file_name);
         let utxot = read_utxot(
             commitment_file_name,
             public_key_file_name,
@@ -119,7 +124,9 @@ where
         );
         let kit = read_kit();
 
+        assert_eq!(keys.len(), num_iters);
         assert_eq!(keys.len(), comms.len());
+        assert_eq!(keys.len(), comms_blind.len());
         assert_eq!(keys.len(), hash_ps.len());
         assert_eq!(keys.len(), dsts.len());
 
@@ -129,10 +136,11 @@ where
             iters.push(PORIteration {
                 priv_key: keys[i].clone(),
                 c: comms[i].clone(),
+                c_blind: comms_blind[i].clone(),
                 hp: hash_ps[i].clone(),
                 dst: dsts[i].clone(),
                 r: salts[i],
-                _hash_dst_root: hash_dst_roots[i].clone(),
+                // _hash_dst_root: hash_dst_roots[i].clone(),
                 kit: kit.clone(),
                 utxot: utxot.clone(),
                 utxo_idx: F::from(i as u64),
@@ -212,7 +220,7 @@ where
         let x_vec: Vec<Boolean> = x_vec[..253].try_into().unwrap();
         assert_eq!(x_vec.len(), 253);
 
-        // x is absent in DST
+        // (x||Block_height) is absent in DST
         let alloc_block_height =
             AllocatedNum::alloc(&mut cs.namespace(|| "alloc block height"), || {
                 Ok(F::from_u128(BLOCK_HEIGHT))
@@ -232,13 +240,13 @@ where
             DST_HEIGHT,
             Namespace<'_, F, CS::Root>,
         >(
-            cs.namespace(|| "P is non-member"),
+            cs.namespace(|| "x is non-member"),
             dst_root_var.clone(),
             self.dst.clone(),
             hash_x.clone(),
         )?;
         let x_bit =
-            AllocatedBit::alloc(cs.namespace(|| "alloc p bit"), x_is_non_member.get_value())?;
+            AllocatedBit::alloc(cs.namespace(|| "alloc x bit"), x_is_non_member.get_value())?;
         cs.enforce(
             || "enforce x_bit equal to one",
             |lc| lc,
@@ -309,15 +317,6 @@ where
             &Boolean::constant(true),
         )?;
 
-        // Calculate I = x * H(P)
-        let hp_alloc = AllocatedAffinePoint::alloc_affine_point(
-            &mut cs.namespace(|| "allocate H(P)"),
-            &self.hp,
-        )?;
-        let key_img: AllocatedAffinePoint<F> = hp_alloc
-            .clone()
-            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate key image"), x_vec)?;
-
         // Check KIT Root is same
         let alloc_kit_root =
             AllocatedNum::alloc(&mut cs.namespace(|| "alloc KIT root"), || Ok(self.kit.root))?;
@@ -327,6 +326,15 @@ where
             |lc| lc,
             |lc| lc + z[0].get_variable() - alloc_kit_root.get_variable(),
         );
+
+        // Calculate I = x * H(P)
+        let hp_alloc = AllocatedAffinePoint::alloc_affine_point(
+            &mut cs.namespace(|| "allocate H(P)"),
+            &self.hp,
+        )?;
+        let key_img: AllocatedAffinePoint<F> = hp_alloc
+            .clone()
+            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate key image"), x_vec)?;
 
         // Check I is absent in KIT
         let key_img_slice: [F; 4] = point_to_slice(&key_img.get_point());
@@ -368,13 +376,35 @@ where
             |lc| lc + CS::one() - k_bit.get_variable(),
         );
 
-        // Insert x in DST
+        // Insert (x||Block_height) in DST
         let mut next_dst = self.dst.clone();
         index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
             cs.namespace(|| "Insert P"),
             &mut next_dst,
             dst_root_var,
             hash_x.clone(),
+        )?;
+
+        // Calculate H(r||dst_root)
+        let r_alloc = AllocatedNum::alloc(cs.namespace(|| "salt"), || Ok(self.r))?;
+        let dst_root_alloc =
+            AllocatedNum::alloc(cs.namespace(|| "dst root var output"), || Ok(next_dst.root))?;
+        let dst_root_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
+        let hash_dst_root = hash_circuit(
+            &mut cs.namespace(|| "hash dst root"),
+            vec![r_alloc.clone(), dst_root_alloc],
+            &dst_root_hash_params,
+        )?;
+
+        // Blind commitment
+        let alloc_c =
+            AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc c"), &self.c)?;
+        let alloc_blind =
+            AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc c blind"), &self.c_blind)?;
+        let c_blinded = AllocatedAffinePoint::ed25519_point_addition(
+            &mut cs.namespace(|| "calc c blinded"),
+            &alloc_c,
+            &alloc_blind
         )?;
 
         // Sum commitments to amount
@@ -389,11 +419,9 @@ where
             &mut cs.namespace(|| "Alloc c_total"),
             &c_total,
         )?;
-        let alloc_c =
-            AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc c"), &self.c)?;
         let c_new_total = AllocatedAffinePoint::ed25519_point_addition(
             &mut cs.namespace(|| "Add commitments"),
-            &alloc_c,
+            &c_blinded,
             &alloc_c_total,
         )?;
         let c_new_total_vec: Vec<AllocatedNum<F>> = point_to_slice(&c_new_total.get_point())
@@ -406,15 +434,6 @@ where
 
         // Output
         let mut out_vec = vec![];
-        let r_alloc = AllocatedNum::alloc(cs.namespace(|| "salt"), || Ok(self.r))?;
-        let dst_root_alloc =
-            AllocatedNum::alloc(cs.namespace(|| "dst root var output"), || Ok(next_dst.root))?;
-        let dst_root_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
-        let hash_dst_root = hash_circuit(
-            &mut cs.namespace(|| "hash dst root"),
-            vec![r_alloc.clone(), dst_root_alloc],
-            &dst_root_hash_params,
-        )?;
         out_vec.push(alloc_kit_root);
         out_vec.push(alloc_utxot_root);
         out_vec.push(hash_dst_root);
@@ -528,7 +547,7 @@ mod tests {
             let mut z_in: Vec<Fp> = vec![
                 iters[i].kit.root.clone(),
                 iters[i].utxot.root.clone(),
-                iters[i]._hash_dst_root,
+                // iters[i]._hash_dst_root,
             ];
             let basept: [Fp; 4] = point_to_slice(&Ed25519Curve::basepoint());
             z_in.extend(basept);

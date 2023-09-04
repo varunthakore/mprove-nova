@@ -3,6 +3,7 @@
 use clap::{Arg, Command};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::scalar::Scalar;
 
 use rand_07;
 use sha3::Keccak512;
@@ -36,6 +37,7 @@ fn main() {
     let amount_file_name = format!("tmp/a_{num_values}.txt");
     let private_key_file_name = format!("tmp/x_{num_values}.txt");
     let commitment_file_name = format!("tmp/c_{num_values}.txt");
+    let commitment_blind_file_name = format!("tmp/c_blind_{num_values}.txt");
     let public_key_file_name = format!("tmp/p_{num_values}.txt");
     let public_key_hash_file_name = format!("tmp/hp_{num_values}.txt");
     let keyimage_file_name = format!("tmp/i_{num_values}.txt");
@@ -46,6 +48,8 @@ fn main() {
     let mut private_key_buf = BufWriter::new(private_key_file);
     let commitment_file = File::create(commitment_file_name).expect(file_err_msg);
     let mut commitment_buf = BufWriter::new(commitment_file);
+    let commitment_blind_file = File::create(commitment_blind_file_name).expect(file_err_msg);
+    let mut commitment_blind_buf = BufWriter::new(commitment_blind_file);
     let public_key_file = File::create(public_key_file_name).expect(file_err_msg);
     let mut public_key_buf = BufWriter::new(public_key_file);
     let public_key_hash_file = File::create(public_key_hash_file_name).expect(file_err_msg);
@@ -73,6 +77,12 @@ fn main() {
         // Write commitments
         let (cx, cy) = ristretto_to_affine_bytes(utxo_info.amount_commitment);
         writeln!(commitment_buf, "{} {}", hex::encode(cx), hex::encode(cy)).expect(file_err_msg);
+
+        // Write blind commitments
+        let commitment_blinding_factor = Scalar::random(&mut rng);
+        let c_blind = g * commitment_blinding_factor;
+        let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
+        writeln!(commitment_blind_buf, "{} {}", hex::encode(c_blind_x), hex::encode(c_blind_y)).expect(file_err_msg);
 
         // Write P
         let (px, py) = ristretto_to_affine_bytes(utxo_info.public_key);
