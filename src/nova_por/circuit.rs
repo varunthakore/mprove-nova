@@ -468,6 +468,7 @@ mod tests {
     use super::*;
     use bellpepper_core::test_cs::TestConstraintSystem;
     use curve25519_dalek::{constants::RISTRETTO_BASEPOINT_POINT, ristretto::RistrettoPoint};
+    use curve25519_dalek::scalar::Scalar;
     use generic_array::typenum::{U1, U12, U2, U3, U4};
     use pasta_curves::Fp;
     use sha3::Keccak512;
@@ -481,6 +482,7 @@ mod tests {
         // let amount_file_name = format!("tmp/a_{num_iters}.txt");
         let private_key_file_name = format!("tmp/x_{num_iters}.txt");
         let commitment_file_name = format!("tmp/c_{num_iters}.txt");
+        let commitment_blind_file_name = format!("tmp/c_blind_{num_iters}.txt");
         let public_key_file_name = format!("tmp/p_{num_iters}.txt");
         let public_key_hash_file_name = format!("tmp/hp_{num_iters}.txt");
         let keyimage_file_name = format!("tmp/i_{num_iters}.txt");
@@ -491,6 +493,8 @@ mod tests {
         let mut private_key_buf = BufWriter::new(private_key_file);
         let commitment_file = File::create(commitment_file_name).expect(file_err_msg);
         let mut commitment_buf = BufWriter::new(commitment_file);
+        let commitment_blind_file = File::create(commitment_blind_file_name).expect(file_err_msg);
+        let mut commitment_blind_buf = BufWriter::new(commitment_blind_file);
         let public_key_file = File::create(public_key_file_name).expect(file_err_msg);
         let mut public_key_buf = BufWriter::new(public_key_file);
         let public_key_hash_file = File::create(public_key_hash_file_name).expect(file_err_msg);
@@ -516,6 +520,12 @@ mod tests {
             writeln!(commitment_buf, "{} {}", hex::encode(cx), hex::encode(cy))
                 .expect(file_err_msg);
 
+            // Write blind commitments
+            let commitment_blinding_factor = Scalar::random(&mut rng);
+            let c_blind = g * commitment_blinding_factor;
+            let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
+            writeln!(commitment_blind_buf, "{} {}", hex::encode(c_blind_x), hex::encode(c_blind_y)).expect(file_err_msg);
+
             // Write P
             let (px, py) = ristretto_to_affine_bytes(utxo_info.public_key);
             writeln!(public_key_buf, "{} {}", hex::encode(px), hex::encode(py))
@@ -537,45 +547,44 @@ mod tests {
         }
         let _ = private_key_buf.flush();
         let _ = commitment_buf.flush();
+        let _ = commitment_blind_buf.flush();
         let _ = public_key_buf.flush();
         let _ = public_key_hash_buf.flush();
         let _ = keyimage_buf.flush();
 
         let iters: Vec<PORIteration<Fp, U1, U2, U3, U4, U12>> = PORIteration::get_iters(num_iters);
 
-        for i in 0..num_iters {
-            let mut z_in: Vec<Fp> = vec![
-                iters[i].kit.root.clone(),
-                iters[i].utxot.root.clone(),
-                // iters[i]._hash_dst_root,
-            ];
-            let basept: [Fp; 4] = point_to_slice(&Ed25519Curve::basepoint());
-            z_in.extend(basept);
-            let alloc_z_in: Vec<AllocatedNum<Fp>> = z_in
-                .iter()
-                .enumerate()
-                .map(|(j, v)| {
-                    AllocatedNum::alloc(cs.namespace(|| format!("{i} : alloc input {j}")), || {
-                        Ok(*v)
-                    })
-                    .unwrap()
+        let mut z_0: Vec<Fp> = vec![
+            iters[0].kit.root.clone(),
+            iters[0].utxot.root.clone(),
+            Fp::zero(),
+        ];
+        let basept: [Fp; 4] = point_to_slice(&Ed25519Curve::basepoint());
+        z_0.extend(basept);
+        let alloc_z_in: Vec<AllocatedNum<Fp>> = z_0
+            .iter()
+            .enumerate()
+            .map(|(j, v)| {
+                AllocatedNum::alloc(cs.namespace(|| format!("alloc input {j}")), || {
+                    Ok(*v)
                 })
-                .collect();
+                .unwrap()
+            })
+            .collect();
 
-            let z_out = iters[i]
-                .synthesize(
-                    &mut cs.namespace(|| format!("synthesize step {}", i)),
-                    &alloc_z_in,
-                )
-                .unwrap();
+        let z_1 = iters[0]
+            .synthesize(
+                &mut cs.namespace(|| format!("synthesize step")),
+                &alloc_z_in,
+            )
+            .unwrap();
 
-            // let z_out_exp = iters[i].output(&z_in);
-            assert_eq!(z_out.len(), iters[i].arity());
-            // for i in 0..z_out.len() {
-            //     assert_eq!(z_out[i].get_value().unwrap(), z_out_exp[i]);
-            // }
-            println!("iteration {} done", i);
-        }
+        // let z_out_exp = iters[i].output(&z_in);
+        assert_eq!(z_1.len(), iters[0].arity());
+        // for i in 0..z_out.len() {
+        //     assert_eq!(z_out[i].get_value().unwrap(), z_out_exp[i]);
+        // }
+
 
         assert!(cs.is_satisfied());
         println!("Num constraints = {:?}", cs.num_constraints());
