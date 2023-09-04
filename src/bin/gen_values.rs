@@ -5,7 +5,7 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 
 use rand_07;
-use sha2::Sha512;
+use sha3::Keccak512;
 
 use mprove_nova::{gen_utxo_witness, ristretto_to_affine_bytes, utxo_from_witness};
 use std::{
@@ -33,7 +33,7 @@ fn main() {
     let mut rng = rand_07::thread_rng();
 
     let file_err_msg = "Unable to create or write to file";
-    let amount_file_name = format!("a_{num_values}.txt");
+    let amount_file_name = format!("tmp/a_{num_values}.txt");
     let private_key_file_name = format!("tmp/x_{num_values}.txt");
     let commitment_file_name = format!("tmp/c_{num_values}.txt");
     let public_key_file_name = format!("tmp/p_{num_values}.txt");
@@ -56,7 +56,7 @@ fn main() {
     // G, H - curve points for generating outputs and key-images
     let g = RISTRETTO_BASEPOINT_POINT;
     // Placeholder for the point H which is used to generate Pedersen commitments of the amount
-    let h = RistrettoPoint::hash_from_bytes::<Sha512>(g.compress().as_bytes());
+    let h = RistrettoPoint::hash_from_bytes::<Keccak512>(g.compress().as_bytes());
 
     for i in 0..(*num_values as usize) {
         let wit = gen_utxo_witness(&mut rng);

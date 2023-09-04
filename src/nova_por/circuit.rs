@@ -451,7 +451,7 @@ mod tests {
     use curve25519_dalek::{constants::RISTRETTO_BASEPOINT_POINT, ristretto::RistrettoPoint};
     use generic_array::typenum::{U1, U12, U2, U3, U4};
     use pasta_curves::Fp;
-    use sha2::Sha512;
+    use sha3::Keccak512;
 
     #[test]
     fn test_step() {
@@ -481,7 +481,7 @@ mod tests {
 
         let g = RISTRETTO_BASEPOINT_POINT;
         // Placeholder for the point H which is used to generate Pedersen commitments of the amount
-        let h = RistrettoPoint::hash_from_bytes::<Sha512>(g.compress().as_bytes());
+        let h = RistrettoPoint::hash_from_bytes::<Keccak512>(g.compress().as_bytes());
 
         let mut rng = rand_07::thread_rng();
 
