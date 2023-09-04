@@ -10,11 +10,11 @@ bellpepper-core = { version = "0.2.0", default-features = false }
 bellpepper = { version = "0.2.0", default-features = false }
 neptune = { version = "11.0.0", default-features = false }
 curve25519-dalek = { git = "https://github.com/varunthakore/curve25519-dalek.git", branch = "release/3.2" }
-sha2 = { version = "0.9", default-features = false }
+# sha2 = { version = "0.9", default-features = false }
 sha3 = { version = "0.9", default-features = false }
 ff = "0.13.0"
 bellpepper-ed25519 = { git = "https://github.com/avras/bellperson-ed25519.git", branch = "bellpepper-version" }
-merkle-trees = { git = "https://github.com/avras/merkle-trees.git", branch = "bellpepper-version" }
+merkle-trees = { git = "https://github.com/varunthakore/merkle-trees.git" }
 num-bigint = "0.4.3"
 nova-snark = { git = "https://github.com/microsoft/Nova" }
 itertools = "0.11.0"
