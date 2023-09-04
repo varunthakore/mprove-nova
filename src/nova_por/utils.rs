@@ -1,206 +1,155 @@
+use bellpepper_ed25519::curve::AffinePoint;
+use bellpepper_ed25519::field::Fe25519;
+use ff::{PrimeField, PrimeFieldBits};
 use merkle_trees::index_tree;
 use merkle_trees::index_tree::tree::IndexTree;
-use neptune::{Strength, Arity};
-use neptune::sponge::vanilla::{SpongeTrait, Sponge};
-use ff::{PrimeField, PrimeFieldBits};
-use bp_ed25519::curve::AffinePoint;
-use bp_ed25519::field::Fe25519;
-use crypto_bigint::{U256, CheckedAdd, CheckedMul};
+use neptune::sponge::vanilla::{Sponge, SpongeTrait};
+use neptune::{Arity, Strength};
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{self, BufRead};
 use std::marker::PhantomData;
+use std::path::Path;
 
 use itertools::izip;
 
 use std::cmp::PartialOrd;
 
+use merkle_trees::hash::vanilla::hash;
 use merkle_trees::vanilla_tree;
 use merkle_trees::vanilla_tree::tree::MerkleTree;
-use merkle_trees::hash::vanilla::hash;
 
 pub const KIT_HEIGHT: usize = 32;
 pub const DST_HEIGHT: usize = 32;
 pub const UTXO_HEIGHT: usize = 32;
 pub const BLOCK_HEIGHT: u128 = 1001; // Insert Block Height for POR
 
-// Convert AffinePoint to Vec<F>. Representing x as two feild elements. Similarly for y.
-pub fn point_to_vec<F: PrimeField + PrimeFieldBits>(point: AffinePoint) -> Vec<F> {
-    let x_bytes: [u8; 32] = point.get_x().to_repr().try_into().unwrap();
-    let x: Vec<u128> = x_bytes
-        .clone()
-        .chunks(16)
-        .map(|a| u128::from_le_bytes(<&[u8] as TryInto<[u8; 16]>>::try_into(a).unwrap()))
-        .collect();
-    assert_eq!(x.len(), 2);
-    assert_eq!(
-        U256::from(x[0])
-            .checked_add(
-                &(&U256::from(1u64) << 128)
-                    .checked_mul(&U256::from(x[1]))
-                    .unwrap()
-            )
-            .unwrap(),
-        point.get_x().get_value()
-    );
-
-    let y_bytes: [u8; 32] = point.get_y().to_repr().try_into().unwrap();
-    let y: Vec<u128> = y_bytes
-        .clone()
-        .chunks(16)
-        .map(|a| u128::from_le_bytes(<&[u8] as TryInto<[u8; 16]>>::try_into(a).unwrap()))
-        .collect();
-    assert_eq!(y.len(), 2);
-    assert_eq!(
-        U256::from(y[0])
-            .checked_add(
-                &(&U256::from(1u64) << 128)
-                    .checked_mul(&U256::from(y[1]))
-                    .unwrap()
-            )
-            .unwrap(),
-        point.get_y().get_value()
-    );
-
-    let mut out_vec: Vec<F> = vec![];
-    out_vec.push(F::from_u128(x[0]));
-    out_vec.push(F::from_u128(x[1]));
-    out_vec.push(F::from_u128(y[0]));
-    out_vec.push(F::from_u128(y[1]));
-    assert_eq!(out_vec.len(), 4);
-    out_vec
+// Code from https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
 }
 
-pub fn vec_to_point<F: PrimeField<Repr = [u8; 32]>>(vec: Vec<F>) -> AffinePoint {
-    assert_eq!(vec.len(), 4);
-    let x0 = vec[0].to_repr();
-    let x1 = vec[1].to_repr();
-    let (x_bytes_0, _) = x0.split_at(16);
-    let (x_bytes_1, _) = x1.split_at(16);
+// Convert AffinePoint to F slice. Representing x as two field elements. Similarly for y.
+pub fn point_to_slice<F: PrimeField>(point: &AffinePoint) -> [F; 4] {
+    let x_bytes: [u8; 32] = point.x.to_bytes_le();
+    let x_lo = u128::from_le_bytes(x_bytes[..16].try_into().unwrap());
+    let x_hi = u128::from_le_bytes(x_bytes[16..].try_into().unwrap());
 
-    let y0 = vec[2].to_repr();
-    let y1 = vec[3].to_repr();
-    let (y_bytes_0, _) = y0.split_at(16);
-    let (y_bytes_1, _) = y1.split_at(16);
+    let y_bytes: [u8; 32] = point.y.to_bytes_le();
+    let y_lo = u128::from_le_bytes(y_bytes[..16].try_into().unwrap());
+    let y_hi = u128::from_le_bytes(y_bytes[16..].try_into().unwrap());
 
-    let mut x_bytes: [u8; 32] = [0; 32];
-    let mut y_bytes: [u8; 32] = [0; 32];
-
-    for i in 0..16 {
-        x_bytes[i] = x_bytes_0[i];
-        x_bytes[i+16] = x_bytes_1[i];
-        y_bytes[i] = y_bytes_0[i];
-        y_bytes[i+16] = y_bytes_1[i];
-    }
-
-    let x_fe = Fe25519::from_repr(x_bytes).unwrap();
-    let y_fe = Fe25519::from_repr(y_bytes).unwrap();
-
-    let point = AffinePoint::coord_to_point(x_fe, y_fe);
-    point
+    vec![x_lo, x_hi, y_lo, y_hi]
+        .into_iter()
+        .map(|a| F::from_u128(a))
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap()
 }
 
-pub fn read_keys<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>() -> Vec<F> {
+pub fn slice_to_point<F: PrimeField<Repr = [u8; 32]>>(a: [F; 4]) -> AffinePoint {
+    let x_lo: [u8; 16] = a[0].to_repr()[..16].try_into().unwrap();
+    let x_hi: [u8; 16] = a[1].to_repr()[..16].try_into().unwrap();
+
+    let y_lo: [u8; 16] = a[2].to_repr()[..16].try_into().unwrap();
+    let y_hi: [u8; 16] = a[3].to_repr()[..16].try_into().unwrap();
+
+    let x_bytes: [u8; 32] = [x_lo, x_hi].concat().try_into().unwrap();
+    let y_bytes: [u8; 32] = [y_lo, y_hi].concat().try_into().unwrap();
+
+    let x = Fe25519::from_bytes_le(&x_bytes);
+    let y = Fe25519::from_bytes_le(&y_bytes);
+
+    AffinePoint { x, y }
+}
+
+pub fn read_keys<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(
+    filename: String,
+) -> Vec<F> {
+    assert!(F::CAPACITY > 252);
     let mut keys: Vec<F> = vec![];
-    let mut x_file = File::open("./src/gen_values/x.txt").unwrap();
-    let mut x_buffer = vec![0; 32];
-    loop {
-        let bytes_read = x_file.read(&mut x_buffer).unwrap();
-        if bytes_read == 0 {
-            break;
+
+    // read key from file
+    if let Ok(lines) = read_lines(filename) {
+        for line in lines {
+            if let Ok(key_string) = line {
+                let key_bytes = hex::decode(key_string).unwrap();
+                let x = F::from_repr(key_bytes.try_into().unwrap());
+                keys.push(x.unwrap());
+            }
         }
-        let d: [u8; 32] = x_buffer[..bytes_read].try_into().unwrap();
-        let x = F::from_repr(d);
-        assert_eq!(x.is_some().unwrap_u8(), 1);
-        keys.push(x.unwrap());
     }
     keys
 }
 
-pub fn read_comm() -> Vec<AffinePoint> {
-    let mut c_vec: Vec<AffinePoint> = vec![];
-    let mut c_file = File::open("src/gen_values/c.txt").unwrap();
-    let mut c_buffer = vec![0; 64];
-    loop {
-        let cbytes = c_file.read(&mut c_buffer).unwrap();
-        if cbytes == 0 {
-            break;
+pub fn read_points(filename: String) -> Vec<AffinePoint> {
+    let mut points: Vec<AffinePoint> = vec![];
+
+    // read point coordinates from file
+    if let Ok(lines) = read_lines(filename) {
+        for line in lines {
+            if let Ok(coordinates_string) = line {
+                let coordinates: Vec<&str> = coordinates_string.trim().split(' ').collect();
+                assert_eq!(coordinates.len(), 2);
+
+                let cx: [u8; 32] = hex::decode(String::from(coordinates[0]))
+                    .expect("Error")
+                    .as_slice()
+                    .try_into()
+                    .unwrap();
+                let cy: [u8; 32] = hex::decode(String::from(coordinates[1]))
+                    .expect("Error")
+                    .as_slice()
+                    .try_into()
+                    .unwrap();
+
+                let p = AffinePoint {
+                    x: Fe25519::from_bytes_le(&cx),
+                    y: Fe25519::from_bytes_le(&cy),
+                };
+
+                assert!(p.is_on_curve());
+                points.push(p);
+            }
         }
-        let ctemp: [u8; 64] = c_buffer[..cbytes].try_into().unwrap();
-        let cx: [u8; 32] = ctemp[..32].try_into().unwrap();
-        let cy: [u8; 32] = ctemp[32..64].try_into().unwrap();
-        let c = AffinePoint::coord_to_point(
-            Fe25519::from_repr(cx).unwrap(),
-            Fe25519::from_repr(cy).unwrap(),
-        );
-        assert!(c.is_on_curve());
-        c_vec.push(c);
     }
-    c_vec
+    points
 }
 
-pub fn read_addr() -> Vec<AffinePoint> {
-    let mut p_vec: Vec<AffinePoint> = vec![];
-    let mut p_file = File::open("src/gen_values/p.txt").unwrap();
-    let mut p_buffer = vec![0; 64];
-    loop {
-        let pbytes = p_file.read(&mut p_buffer).unwrap();
-        if pbytes == 0 {
-            break;
-        }
-        let ptemp: [u8; 64] = p_buffer[..pbytes].try_into().unwrap();
-        let px: [u8; 32] = ptemp[..32].try_into().unwrap();
-        let py: [u8; 32] = ptemp[32..64].try_into().unwrap();
-        let p = AffinePoint::coord_to_point(
-            Fe25519::from_repr(px).unwrap(),
-            Fe25519::from_repr(py).unwrap(),
-        );
-        assert!(p.is_on_curve());
-        p_vec.push(p);
-    }
-    p_vec
-}
-
-pub fn read_hash_addr() -> Vec<AffinePoint> {
-    let mut hp_vec: Vec<AffinePoint> = vec![];
-    let mut hp_file = File::open("src/gen_values/hp.txt").unwrap();
-    let mut hp_buffer = vec![0; 64];
-    loop {
-        let hpbytes = hp_file.read(&mut hp_buffer).unwrap();
-        if hpbytes == 0 {
-            break;
-        }
-        let hptemp: [u8; 64] = hp_buffer[..hpbytes].try_into().unwrap();
-        let hpx: [u8; 32] = hptemp[..32].try_into().unwrap();
-        let hpy: [u8; 32] = hptemp[32..64].try_into().unwrap();
-        let hp = AffinePoint::coord_to_point(
-            Fe25519::from_repr(hpx).unwrap(),
-            Fe25519::from_repr(hpy).unwrap(),
-        );
-        assert!(hp.is_on_curve());
-        hp_vec.push(hp);
-    }
-    hp_vec
-}
-pub fn read_kit<F: PrimeField + PrimeFieldBits + PartialOrd, AL:Arity<F>, AN:Arity<F>>() -> IndexTree<F, KIT_HEIGHT, AL, AN> {
+pub fn read_kit<F: PrimeField + PrimeFieldBits + PartialOrd, AL: Arity<F>, AN: Arity<F>>(
+) -> IndexTree<F, KIT_HEIGHT, AL, AN> {
     IndexTree::new(index_tree::tree::Leaf::default())
 }
 
-pub fn read_dst<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd, AX: Arity<F>, AL:Arity<F>, AN:Arity<F>>() -> (Vec<IndexTree<F, DST_HEIGHT, AL, AN>>, Vec<F>, Vec<F>) {
-    let mut rng = rand_08::thread_rng();
+pub fn read_dst<F, AX, AL, AN>(
+    keys_filename: String,
+) -> (Vec<IndexTree<F, DST_HEIGHT, AL, AN>>, Vec<F>, Vec<F>)
+where
+    F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd,
+    AX: Arity<F>,
+    AL: Arity<F>,
+    AN: Arity<F>,
+{
+    let mut rng = rand::thread_rng();
     let x_hash_params = Sponge::<F, AX>::api_constants(Strength::Standard);
     let root_hash_params = Sponge::<F, AN>::api_constants(Strength::Standard);
     let mut hash_output_roots: Vec<F> = vec![];
     let mut salts: Vec<F> = vec![];
-    let keys: Vec<F> = read_keys();
+    let keys: Vec<F> = read_keys(keys_filename);
     let mut trees = vec![];
     let mut empty_tree = IndexTree::new(index_tree::tree::Leaf::default());
     trees.push(empty_tree.clone());
 
-    for x in keys.iter().rev().skip(1).rev() {
+    for (i, x) in keys.iter().enumerate() {
         let hash_x = hash(vec![*x, F::from_u128(BLOCK_HEIGHT)], &x_hash_params);
         empty_tree.insert_vanilla(hash_x);
-        trees.push(empty_tree.clone());
+        if i < keys.len() - 1 {
+            trees.push(empty_tree.clone());
+        }
 
         // hash output dst
         let r = F::random(&mut rng);
@@ -209,19 +158,6 @@ pub fn read_dst<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64;
         hash_output_roots.push(hash_root);
     }
 
-    // last insertion into index tree
-    let hash_x = hash(
-        vec![keys[keys.len() - 1], F::from_u128(BLOCK_HEIGHT)],
-            &x_hash_params,
-    );
-    empty_tree.insert_vanilla(hash_x);
-
-    // last hash root
-    let r = F::random(&mut rng);
-    salts.push(r);
-    let hash_root = hash(vec![r, empty_tree.root.clone()], &root_hash_params);
-    hash_output_roots.push(hash_root);
-
     assert_eq!(keys.len(), trees.len());
     assert_eq!(keys.len(), hash_output_roots.len());
     assert_eq!(keys.len(), salts.len());
@@ -229,14 +165,18 @@ pub fn read_dst<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64;
     (trees, salts, hash_output_roots)
 }
 
-pub fn read_utxot<F: PrimeField + PrimeFieldBits,  AL:Arity<F>, AN:Arity<F>>() -> MerkleTree<F, UTXO_HEIGHT, AL, AN> {
+pub fn read_utxot<F: PrimeField + PrimeFieldBits, AL: Arity<F>, AN: Arity<F>>(
+    commitment_file_name: String,
+    public_key_file_name: String,
+    public_key_hash_file_name: String,
+) -> MerkleTree<F, UTXO_HEIGHT, AL, AN> {
     let empty_leaf_val = vanilla_tree::tree::Leaf::default();
     let mut tree = MerkleTree::new(empty_leaf_val);
 
     // Read Leaves to Insert
-    let c_vec = read_comm();
-    let p_vec = read_addr();
-    let hp_vec = read_hash_addr();
+    let c_vec = read_points(commitment_file_name);
+    let p_vec = read_points(public_key_file_name);
+    let hp_vec = read_points(public_key_hash_file_name);
     assert_eq!(c_vec.len(), p_vec.len());
     assert_eq!(c_vec.len(), hp_vec.len());
     let mut leaf_vec = vec![];
@@ -266,14 +206,14 @@ pub fn get_utxo_leaf<F: PrimeField + PrimeFieldBits, A: Arity<F>>(
     hp: AffinePoint,
 ) -> vanilla_tree::tree::Leaf<F, A> {
     let mut val = vec![];
-    let c_vec: Vec<F> = point_to_vec(c);
-    let p_vec: Vec<F> = point_to_vec(p);
-    let hp_vec: Vec<F> = point_to_vec(hp);
-    val.extend(c_vec);
-    val.extend(p_vec);
-    val.extend(hp_vec);
+    let c_slice: [F; 4] = point_to_slice(&c);
+    let p_slice: [F; 4] = point_to_slice(&p);
+    let hp_slice: [F; 4] = point_to_slice(&hp);
+    val.extend(c_slice);
+    val.extend(p_slice);
+    val.extend(hp_slice);
     let leaf = vanilla_tree::tree::Leaf {
-        val: val,
+        val,
         _arity: PhantomData,
     };
     leaf
@@ -282,23 +222,23 @@ pub fn get_utxo_leaf<F: PrimeField + PrimeFieldBits, A: Arity<F>>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::Field;
     use pasta_curves::Fp;
-    use crypto_bigint::Encoding;
 
     fn random_point() -> AffinePoint {
-        let mut rng = rand_08::thread_rng();
-        let d = U256::to_le_bytes(&U256::from_be_hex("52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3"));
-        let d_fe = Fe25519::from_repr(d).unwrap();
+        let mut rng = rand::thread_rng();
+        let d = hex::decode("52036cee2b6ffe738cc740797779e89800700a4d4141d8ab75eb4dca135978a3");
+        assert!(d.is_ok());
+        let d_bytes = d.unwrap();
+        let d_fe = &Fe25519::from_bytes_le(&d_bytes);
         let point;
         loop {
             let y = Fe25519::random(&mut rng);
-            let y_sq = y.square();
-            let x_sq = (y_sq - Fe25519::ONE) * (d_fe*y_sq + Fe25519::ONE).invert().unwrap();
+            let y_sq = &y.square();
+            let x_sq = (y_sq - &Fe25519::one()) * (d_fe * y_sq + Fe25519::one()).invert().unwrap();
 
             let x = x_sq.sqrt();
             if bool::from(x.is_some()) {
-                point = AffinePoint::coord_to_point(x.unwrap(), y);
+                point = AffinePoint { x: x.unwrap(), y };
                 break;
             }
         }
@@ -308,8 +248,8 @@ mod tests {
     #[test]
     fn test_point_roundtrip() {
         let point = random_point();
-        let vec: Vec<Fp> = point_to_vec(point);
-        let point_rt = vec_to_point(vec);
+        let slice: [Fp; 4] = point_to_slice(&point);
+        let point_rt = slice_to_point(slice);
         assert_eq!(point, point_rt);
     }
 }
