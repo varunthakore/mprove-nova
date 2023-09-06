@@ -24,7 +24,7 @@ use merkle_trees::vanilla_tree;
 use merkle_trees::vanilla_tree::tree::MerkleTree;
 
 use super::utils::{
-    get_utxo_leaf, read_dst, read_keys, read_kit, read_utxot, BLOCK_HEIGHT, DST_HEIGHT, KIT_HEIGHT,
+    get_utxo_leaf, read_dst, read_scalars, read_kit, read_utxot, BLOCK_HEIGHT, DST_HEIGHT, KIT_HEIGHT,
     UTXO_HEIGHT,
 };
 
@@ -40,10 +40,10 @@ where
 {
     priv_key: F,
     c: AffinePoint,
-    c_blind: AffinePoint,
+    r: F,
+    // c_blind: AffinePoint,
     hp: AffinePoint,
     dst: IndexTree<F, DST_HEIGHT, A3, A2>,
-    r: F,
     // _hash_dst_root: F, // H(r, output_dst_root)
     kit: IndexTree<F, KIT_HEIGHT, A3, A2>,
     utxot: MerkleTree<F, UTXO_HEIGHT, A12, A2>,
@@ -65,10 +65,10 @@ where
         Self {
             priv_key: F::ZERO,
             c: Ed25519Curve::basepoint(),
-            c_blind: Ed25519Curve::basepoint(),
+            r: F::ZERO,
+            // c_blind: Ed25519Curve::basepoint(),
             hp: Ed25519Curve::basepoint(),
             dst: IndexTree::new(index_tree::tree::Leaf::default()),
-            r: F::ZERO,
             // _hash_dst_root: F::ZERO,
             kit: IndexTree::new(index_tree::tree::Leaf::default()),
             utxot: MerkleTree::new(vanilla_tree::tree::Leaf::default()),
@@ -112,11 +112,11 @@ where
             exit(1);
         }
 
-        let keys: Vec<F> = read_keys::<F>(private_key_file_name.clone());
+        let keys: Vec<F> = read_scalars::<F>(private_key_file_name.clone());
         let comms = read_points(commitment_file_name.clone());
-        let comms_blind = read_points(commitment_blind_file_name.clone());
+        let comms_blind = read_scalars::<F>(commitment_blind_file_name.clone());
         let hash_ps = read_points(public_key_hash_file_name.clone());
-        let (dsts, salts, _hash_dst_roots) = read_dst::<F, A2, A3, A2>(private_key_file_name);
+        let (dsts, _salts, _hash_dst_roots) = read_dst::<F, A2, A3, A2>(private_key_file_name);
         let utxot = read_utxot(
             commitment_file_name,
             public_key_file_name,
@@ -136,10 +136,10 @@ where
             iters.push(PORIteration {
                 priv_key: keys[i].clone(),
                 c: comms[i].clone(),
-                c_blind: comms_blind[i].clone(),
+                r: comms_blind[i],
+                // c_blind: comms_blind[i].clone(),
                 hp: hash_ps[i].clone(),
                 dst: dsts[i].clone(),
-                r: salts[i],
                 // _hash_dst_root: hash_dst_roots[i].clone(),
                 kit: kit.clone(),
                 utxot: utxot.clone(),
@@ -152,7 +152,7 @@ where
     }
 
     pub fn get_z0(&self) -> Vec<F> {
-        let mut z0 = vec![self.kit.root, self.utxot.root, F::ZERO];
+        let mut z0 = vec![self.kit.root, self.utxot.root, self.dst.root];
         let zero_comm = Ed25519Curve::basepoint();
         let zero_comm_slice: [F; 4] = point_to_slice(&zero_comm);
         z0.extend(zero_comm_slice);
@@ -184,8 +184,17 @@ where
             &mut cs.namespace(|| "allocate base point"),
             &b,
         )?;
+        // Check DST root
+        let alloc_dst_root =
+            AllocatedNum::alloc(&mut cs.namespace(|| "alloc DST root"), || Ok(self.kit.root))?;
+        cs.enforce(
+            || "Check DST root",
+            |lc| lc,
+            |lc| lc,
+            |lc| lc + z[2].get_variable() - alloc_dst_root.get_variable(),
+        );
 
-        // Alloc priv_key
+        // Allocate private key x
         let x_alloc = AllocatedNum::alloc(&mut cs.namespace(|| "alloc private key"), || {
             Ok(self.priv_key)
         })?;
@@ -215,12 +224,12 @@ where
             coeff = coeff.double();
         }
         lc = lc - x_alloc.get_variable();
-        cs.enforce(|| "unpacking constraint", |lc| lc, |lc| lc, |_| lc);
+        cs.enforce(|| "unpacking constraint for x_alloc", |lc| lc, |lc| lc, |_| lc);
         let x_vec: Vec<Boolean> = x_bits.into_iter().map(Boolean::from).collect();
         let x_vec: Vec<Boolean> = x_vec[..253].try_into().unwrap();
         assert_eq!(x_vec.len(), 253);
 
-        // (x||Block_height) is absent in DST
+        // Check non-membership of (x||Block_height) in DST
         let alloc_block_height =
             AllocatedNum::alloc(&mut cs.namespace(|| "alloc block height"), || {
                 Ok(F::from_u128(BLOCK_HEIGHT))
@@ -259,19 +268,19 @@ where
             .clone()
             .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate p"), x_vec.clone())?;
 
-        // Check UTXO Tree root is same
+        // Check UTXO Tree root
         let alloc_utxot_root =
             AllocatedNum::alloc(&mut cs.namespace(|| "alloc UTXOT root"), || {
                 Ok(self.utxot.root)
             })?;
         cs.enforce(
-            || "UTXO Tree root is same",
+            || "Check UTXO Tree root",
             |lc| lc,
             |lc| lc,
             |lc| lc + z[1].get_variable() - alloc_utxot_root.get_variable(),
         );
 
-        // C, P, H(P) is present in Utxo Tree
+        // Check membership of (C, P, H(P)) UTXO Tree
         let utxo_idx = self.utxo_idx;
         let utxo_idx_in_bits = idx_to_bits(UTXO_HEIGHT, utxo_idx);
         let utxo_path = self.utxot.get_siblings_path(utxo_idx_in_bits.clone());
@@ -317,11 +326,11 @@ where
             &Boolean::constant(true),
         )?;
 
-        // Check KIT Root is same
+        // Check KIT root
         let alloc_kit_root =
             AllocatedNum::alloc(&mut cs.namespace(|| "alloc KIT root"), || Ok(self.kit.root))?;
         cs.enforce(
-            || "KIT root is same",
+            || "Check KIT root",
             |lc| lc,
             |lc| lc,
             |lc| lc + z[0].get_variable() - alloc_kit_root.get_variable(),
@@ -336,7 +345,7 @@ where
             .clone()
             .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate key image"), x_vec)?;
 
-        // Check I is absent in KIT
+        // Check non-membership of I in KIT
         let key_img_slice: [F; 4] = point_to_slice(&key_img.get_point());
         let key_img_alloc: Vec<AllocatedNum<F>> = key_img_slice
             .into_iter()
@@ -379,56 +388,96 @@ where
         // Insert (x||Block_height) in DST
         let mut next_dst = self.dst.clone();
         index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
-            cs.namespace(|| "Insert P"),
+            cs.namespace(|| "Insert (x||Block_height)"),
             &mut next_dst,
             dst_root_var,
             hash_x.clone(),
         )?;
-
-        // Calculate H(r||dst_root)
-        let r_alloc = AllocatedNum::alloc(cs.namespace(|| "salt"), || Ok(self.r))?;
-        let dst_root_alloc =
+        let next_dst_root_alloc =
             AllocatedNum::alloc(cs.namespace(|| "dst root var output"), || Ok(next_dst.root))?;
-        let dst_root_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
-        let hash_dst_root = hash_circuit(
-            &mut cs.namespace(|| "hash dst root"),
-            vec![r_alloc.clone(), dst_root_alloc],
-            &dst_root_hash_params,
-        )?;
 
-        // Blind commitment
+        // // Calculate H(r||dst_root)
+        // let r_alloc = AllocatedNum::alloc(cs.namespace(|| "salt"), || Ok(self.r))?;
+        // let next_dst_root_alloc =
+        //     AllocatedNum::alloc(cs.namespace(|| "dst root var output"), || Ok(next_dst.root))?;
+        // let dst_root_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
+        // let hash_dst_root = hash_circuit(
+        //     &mut cs.namespace(|| "hash dst root"),
+        //     vec![r_alloc.clone(), dst_root_alloc],
+        //     &dst_root_hash_params,
+        // )?;
+
+        // Allocate random scalar r
+        let r_alloc = AllocatedNum::alloc(cs.namespace(|| "random scalar"), || Ok(self.r))?;
+        let r_bits: Vec<AllocatedBit> = self
+            .r
+            .to_le_bits()
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                AllocatedBit::alloc(
+                    &mut cs.namespace(|| format!("alloc bit {} of r_alloc", i)),
+                    Some(*b),
+                )
+                .unwrap()
+            })
+            .collect();
+        assert_eq!(r_bits.len(), 256);
+        assert_eq!(r_bits[255].get_value().unwrap(), false);
+        assert_eq!(r_bits[254].get_value().unwrap(), false);
+        assert_eq!(r_bits[253].get_value().unwrap(), false);
+        let r_bits: Vec<AllocatedBit> = r_bits[..253].try_into().unwrap(); //the largest curve25519 scalar fits in 253 bits
+        let mut lc = LinearCombination::zero();
+        let mut coeff = F::ONE;
+        for bit in r_bits.iter() {
+            lc = lc + (coeff, bit.get_variable());
+
+            coeff = coeff.double();
+        }
+        lc = lc - r_alloc.get_variable();
+        cs.enforce(|| "unpacking constraint for r_alloc", |lc| lc, |lc| lc, |_| lc);
+        let r_vec: Vec<Boolean> = r_bits.into_iter().map(Boolean::from).collect();
+        let r_vec: Vec<Boolean> = r_vec[..253].try_into().unwrap();
+        assert_eq!(r_vec.len(), 253);
+
+        // Calculate random point to blind commitment
+        let alloc_c_rand: AllocatedAffinePoint<F> = b_alloc
+            .clone()
+            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate p"), r_vec.clone())?;
+
+        // Calculate blinded commitment
         let alloc_c =
             AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc c"), &self.c)?;
-        let alloc_blind =
-            AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc c blind"), &self.c_blind)?;
-        let c_blinded = AllocatedAffinePoint::ed25519_point_addition(
+        // let alloc_blind =
+            // AllocatedAffinePoint::alloc_affine_point(&mut cs.namespace(|| "alloc c blind"), &self.c_blind)?;
+        let c_blind = AllocatedAffinePoint::ed25519_point_addition(
             &mut cs.namespace(|| "calc c blinded"),
             &alloc_c,
-            &alloc_blind
+            &alloc_c_rand
         )?;
 
-        // Sum commitments to amount
+        // Calculate commitment to total reserves
         let basepoint_slice: [F; 4] = point_to_slice(&Ed25519Curve::basepoint());
         let mut v = vec![];
         v.push(z[3].get_value().unwrap_or(basepoint_slice[0]));
         v.push(z[4].get_value().unwrap_or(basepoint_slice[1]));
         v.push(z[5].get_value().unwrap_or(basepoint_slice[2]));
         v.push(z[6].get_value().unwrap_or(basepoint_slice[3]));
-        let c_total = slice_to_point(v.as_slice().try_into().unwrap());
-        let alloc_c_total = AllocatedAffinePoint::alloc_affine_point(
-            &mut cs.namespace(|| "Alloc c_total"),
-            &c_total,
+        let c_res = slice_to_point(v.as_slice().try_into().unwrap());
+        let alloc_c_res = AllocatedAffinePoint::alloc_affine_point(
+            &mut cs.namespace(|| "Alloc c_res"),
+            &c_res,
         )?;
-        let c_new_total = AllocatedAffinePoint::ed25519_point_addition(
+        let next_c_res = AllocatedAffinePoint::ed25519_point_addition(
             &mut cs.namespace(|| "Add commitments"),
-            &c_blinded,
-            &alloc_c_total,
+            &c_blind,
+            &alloc_c_res,
         )?;
-        let c_new_total_vec: Vec<AllocatedNum<F>> = point_to_slice(&c_new_total.get_point())
+        let next_c_res_vec: Vec<AllocatedNum<F>> = point_to_slice(&next_c_res.get_point())
             .into_iter()
             .enumerate()
             .map(|(i, s)| {
-                AllocatedNum::alloc(cs.namespace(|| format!("c_new_total_vec {}", i)), || Ok(s))
+                AllocatedNum::alloc(cs.namespace(|| format!("next_c_res_vec {}", i)), || Ok(s))
             })
             .collect::<Result<Vec<AllocatedNum<F>>, SynthesisError>>()?;
 
@@ -436,8 +485,8 @@ where
         let mut out_vec = vec![];
         out_vec.push(alloc_kit_root);
         out_vec.push(alloc_utxot_root);
-        out_vec.push(hash_dst_root);
-        out_vec.extend(c_new_total_vec);
+        out_vec.push(next_dst_root_alloc);
+        out_vec.extend(next_c_res_vec);
 
         Ok(out_vec)
     }
