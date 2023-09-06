@@ -179,14 +179,16 @@ where
         cs: &mut CS,
         z: &[AllocatedNum<F>],
     ) -> Result<Vec<AllocatedNum<F>>, SynthesisError> {
+        // Allocate basepoint b
         let b = Ed25519Curve::basepoint();
         let b_alloc: AllocatedAffinePoint<F> = AllocatedAffinePoint::alloc_affine_point(
             &mut cs.namespace(|| "allocate base point"),
             &b,
         )?;
+        
         // Check DST root
         let alloc_dst_root =
-            AllocatedNum::alloc(&mut cs.namespace(|| "alloc DST root"), || Ok(self.kit.root))?;
+            AllocatedNum::alloc(&mut cs.namespace(|| "alloc DST root"), || Ok(self.dst.root))?;
         cs.enforce(
             || "Check DST root",
             |lc| lc,
@@ -236,12 +238,12 @@ where
             })?;
         let x_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
         let hash_x = hash_circuit(
-            &mut cs.namespace(|| "hash addr"),
+            &mut cs.namespace(|| "hash (x||BH)"),
             vec![x_alloc, alloc_block_height.clone()],
             &x_hash_params,
         )?;
-        let dst_root_var: AllocatedNum<F> =
-            AllocatedNum::alloc(cs.namespace(|| "dst root var"), || Ok(self.dst.root))?;
+        // let dst_root_var: AllocatedNum<F> =
+            // AllocatedNum::alloc(cs.namespace(|| "dst root var"), || Ok(self.dst.root))?;
         let x_is_non_member = index_tree::circuit::is_non_member::<
             F,
             A3,
@@ -249,8 +251,8 @@ where
             DST_HEIGHT,
             Namespace<'_, F, CS::Root>,
         >(
-            cs.namespace(|| "x is non-member"),
-            dst_root_var.clone(),
+            cs.namespace(|| "x||BH is non-member"),
+            alloc_dst_root.clone(),
             self.dst.clone(),
             hash_x.clone(),
         )?;
@@ -390,7 +392,7 @@ where
         index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
             cs.namespace(|| "Insert (x||Block_height)"),
             &mut next_dst,
-            dst_root_var,
+            alloc_dst_root,
             hash_x.clone(),
         )?;
         let next_dst_root_alloc =
@@ -443,7 +445,7 @@ where
         // Calculate random point to blind commitment
         let alloc_c_rand: AllocatedAffinePoint<F> = b_alloc
             .clone()
-            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate p"), r_vec.clone())?;
+            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate c_rand"), r_vec.clone())?;
 
         // Calculate blinded commitment
         let alloc_c =
@@ -569,11 +571,12 @@ mod tests {
             writeln!(commitment_buf, "{} {}", hex::encode(cx), hex::encode(cy))
                 .expect(file_err_msg);
 
-            // Write blind commitments
+            // Write blind commitments scalars
             let commitment_blinding_factor = Scalar::random(&mut rng);
-            let c_blind = g * commitment_blinding_factor;
-            let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
-            writeln!(commitment_blind_buf, "{} {}", hex::encode(c_blind_x), hex::encode(c_blind_y)).expect(file_err_msg);
+            let blind_bytes = commitment_blinding_factor.as_bytes();
+            // let c_blind = g * commitment_blinding_factor;
+            // let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
+            writeln!(commitment_blind_buf, "{}", hex::encode(blind_bytes)).expect(file_err_msg);
 
             // Write P
             let (px, py) = ristretto_to_affine_bytes(utxo_info.public_key);
@@ -606,7 +609,7 @@ mod tests {
         let mut z_0: Vec<Fp> = vec![
             iters[0].kit.root.clone(),
             iters[0].utxot.root.clone(),
-            Fp::zero(),
+            iters[0].dst.root.clone(),
         ];
         let basept: [Fp; 4] = point_to_slice(&Ed25519Curve::basepoint());
         z_0.extend(basept);
