@@ -78,11 +78,12 @@ fn main() {
         let (cx, cy) = ristretto_to_affine_bytes(utxo_info.amount_commitment);
         writeln!(commitment_buf, "{} {}", hex::encode(cx), hex::encode(cy)).expect(file_err_msg);
 
-        // Write blind commitments
+        // Write blind commitments scalars
         let commitment_blinding_factor = Scalar::random(&mut rng);
-        let c_blind = g * commitment_blinding_factor;
-        let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
-        writeln!(commitment_blind_buf, "{} {}", hex::encode(c_blind_x), hex::encode(c_blind_y)).expect(file_err_msg);
+        let blind_bytes = commitment_blinding_factor.as_bytes();
+        // let c_blind = g * commitment_blinding_factor;
+        // let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
+        writeln!(commitment_blind_buf, "{}", hex::encode(blind_bytes)).expect(file_err_msg);
 
         // Write P
         let (px, py) = ristretto_to_affine_bytes(utxo_info.public_key);

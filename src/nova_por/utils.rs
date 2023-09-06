@@ -67,23 +67,23 @@ pub fn slice_to_point<F: PrimeField<Repr = [u8; 32]>>(a: [F; 4]) -> AffinePoint 
     AffinePoint { x, y }
 }
 
-pub fn read_keys<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(
+pub fn read_scalars<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(
     filename: String,
 ) -> Vec<F> {
     assert!(F::CAPACITY > 252);
-    let mut keys: Vec<F> = vec![];
+    let mut scalars: Vec<F> = vec![];
 
     // read key from file
     if let Ok(lines) = read_lines(filename) {
         for line in lines {
-            if let Ok(key_string) = line {
-                let key_bytes = hex::decode(key_string).unwrap();
-                let x = F::from_repr(key_bytes.try_into().unwrap());
-                keys.push(x.unwrap());
+            if let Ok(scalar_string) = line {
+                let scalar_bytes = hex::decode(scalar_string).unwrap();
+                let x = F::from_repr(scalar_bytes.try_into().unwrap());
+                scalars.push(x.unwrap());
             }
         }
     }
-    keys
+    scalars
 }
 
 pub fn read_points(filename: String) -> Vec<AffinePoint> {
@@ -139,7 +139,7 @@ where
     let root_hash_params = Sponge::<F, AN>::api_constants(Strength::Standard);
     let mut hash_output_roots: Vec<F> = vec![];
     let mut salts: Vec<F> = vec![];
-    let keys: Vec<F> = read_keys(keys_filename);
+    let keys: Vec<F> = read_scalars(keys_filename);
     let mut trees = vec![];
     let mut empty_tree = IndexTree::new(index_tree::tree::Leaf::default());
     trees.push(empty_tree.clone());
