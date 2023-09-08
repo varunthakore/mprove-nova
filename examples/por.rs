@@ -8,7 +8,7 @@ use nova_snark::{
     traits::{circuit::TrivialTestCircuit, Group},
     CompressedSNARK, PublicParams, RecursiveSNARK,
 };
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 fn main() {
     let cmd = Command::new("MProve-Nova proof generation and verification")
@@ -26,8 +26,6 @@ fn main() {
     type C2 = TrivialTestCircuit<<G2 as Group>::Scalar>;
     let circuit_primary: C1 = PORIteration::default();
     let circuit_secondary: C2 = TrivialTestCircuit::default();
-
-    let primary_circuit_sequence = C1::get_iters(m); // select m iterations
 
     println!("MProve-Nova iterations");
     println!("=========================================================");
@@ -54,8 +52,8 @@ fn main() {
         "Number of variables per step (secondary circuit): {}",
         pp.num_variables().1
     );
-
-    let z0_primary = C1::get_z0(&primary_circuit_sequence[0]);
+    let w0_primary = C1::get_w0(m);
+    let z0_primary = C1::get_z0(&w0_primary);
     let z0_secondary = vec![<G2 as Group>::Scalar::zero()];
 
     let proof_gen_timer = Instant::now();
@@ -63,38 +61,46 @@ fn main() {
     println!("Generating a RecursiveSNARK...");
     let mut recursive_snark: RecursiveSNARK<G1, G2, C1, C2> = RecursiveSNARK::<G1, G2, C1, C2>::new(
         &pp,
-        &primary_circuit_sequence[0],
+        &w0_primary,
         &circuit_secondary,
         z0_primary.clone(),
         z0_secondary.clone(),
     );
-    let start = Instant::now();
-    for (i, circuit_primary) in primary_circuit_sequence.iter().enumerate() {
+    let mut recursive_snark_prove_time = Duration::ZERO;
+    let mut circuit_primary = w0_primary;
+    for i in 0..m {
         let step_start = Instant::now();
         let res = recursive_snark.prove_step(
             &pp,
-            circuit_primary,
+            &circuit_primary,
             &circuit_secondary,
             z0_primary.clone(),
             z0_secondary.clone(),
         );
         assert!(res.is_ok());
+        let end_step = step_start.elapsed();
         println!(
             "RecursiveSNARK::prove_step {}: {:?}, took {:?} ",
             i,
             res.is_ok(),
-            step_start.elapsed()
+            end_step
         );
+        recursive_snark_prove_time += end_step;
+        
+        if i < m-1 {
+            circuit_primary = PORIteration::get_next_witness(&mut circuit_primary, m, i+2);
+        }
+
     }
     println!(
         "Total time taken by RecursiveSNARK::prove_steps: {:?}",
-        start.elapsed()
+        recursive_snark_prove_time
     );
 
     // verify the recursive SNARK
     println!("Verifying a RecursiveSNARK...");
     let start = Instant::now();
-    let num_steps = primary_circuit_sequence.len();
+    let num_steps = m;
     let res = recursive_snark.verify(&pp, num_steps, &z0_primary, &z0_secondary);
     println!(
         "RecursiveSNARK::verify: {:?}, took {:?}",
