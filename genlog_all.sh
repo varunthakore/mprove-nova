@@ -1,5 +1,5 @@
 #!/bin/bash
-iters=(1 2 3)
+iters=(10 100 500 1000 3000 5000 7000 10000)
 for i in "${iters[@]}"
 do
     echo "Generating values for $i iteration"
