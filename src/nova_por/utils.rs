@@ -33,6 +33,26 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
+fn read_line_at<P>(filename: P, line_number: usize) -> io::Result<Option<String>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    let reader = io::BufReader::new(file);
+    
+    let mut current_line_number = 0;
+    
+    for line in reader.lines() {
+        current_line_number += 1;
+        if current_line_number == line_number {
+            return Ok(Some(line?));
+        }
+    }
+    
+    Ok(None)
+}
+
+
 // Convert AffinePoint to F slice. Representing x as two field elements. Similarly for y.
 pub fn point_to_slice<F: PrimeField>(point: &AffinePoint) -> [F; 4] {
     let x_bytes: [u8; 32] = point.x.to_bytes_le();
@@ -67,23 +87,51 @@ pub fn slice_to_point<F: PrimeField<Repr = [u8; 32]>>(a: [F; 4]) -> AffinePoint 
     AffinePoint { x, y }
 }
 
-pub fn read_scalars<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(
+pub fn read_scalar_at_line<F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]>>(
     filename: String,
-) -> Vec<F> {
+    line_number: usize,
+) -> Option<F> {
     assert!(F::CAPACITY > 252);
-    let mut scalars: Vec<F> = vec![];
-
-    // read key from file
-    if let Ok(lines) = read_lines(filename) {
-        for line in lines {
-            if let Ok(scalar_string) = line {
-                let scalar_bytes = hex::decode(scalar_string).unwrap();
-                let x = F::from_repr(scalar_bytes.try_into().unwrap());
-                scalars.push(x.unwrap());
-            }
-        }
+    
+    if let Ok(Some(line)) = read_line_at(filename, line_number) {
+        let scalar_bytes = hex::decode(line).unwrap();
+        let x = F::from_repr(scalar_bytes.try_into().unwrap()).unwrap();
+        Some(x)
     }
-    scalars
+    else {
+        None
+    }
+
+}
+
+pub fn read_point_at_line(filename: String, line_number: usize) -> Option<AffinePoint> {
+
+    if let Ok(Some(line)) = read_line_at(filename, line_number) {
+        let coordinates: Vec<&str> = line.trim().split(' ').collect();
+        assert_eq!(coordinates.len(), 2);
+
+        let cx: [u8; 32] = hex::decode(String::from(coordinates[0]))
+            .expect("Error")
+            .as_slice()
+            .try_into()
+            .unwrap();
+        let cy: [u8; 32] = hex::decode(String::from(coordinates[1]))
+            .expect("Error")
+            .as_slice()
+            .try_into()
+            .unwrap();
+
+        let p = AffinePoint {
+            x: Fe25519::from_bytes_le(&cx),
+            y: Fe25519::from_bytes_le(&cy),
+        };
+
+        assert!(p.is_on_curve());
+        Some(p)
+    }
+    else {
+        None
+    }
 }
 
 pub fn read_points(filename: String) -> Vec<AffinePoint> {
@@ -125,44 +173,30 @@ pub fn read_kit<F: PrimeField + PrimeFieldBits + PartialOrd, AL: Arity<F>, AN: A
     IndexTree::new(index_tree::tree::Leaf::default())
 }
 
-pub fn read_dst<F, AX, AL, AN>(
-    keys_filename: String,
-) -> (Vec<IndexTree<F, DST_HEIGHT, AL, AN>>, Vec<F>, Vec<F>)
+pub fn get_new_dst<F, AX, AL, AN>(
+    old_dst: &mut IndexTree<F, DST_HEIGHT, AL, AN>,
+    x: &F,
+) -> IndexTree<F, DST_HEIGHT, AL, AN>
 where
     F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd,
     AX: Arity<F>,
     AL: Arity<F>,
     AN: Arity<F>,
 {
-    let mut rng = rand::thread_rng();
     let x_hash_params = Sponge::<F, AX>::api_constants(Strength::Standard);
-    let root_hash_params = Sponge::<F, AN>::api_constants(Strength::Standard);
-    let mut hash_output_roots: Vec<F> = vec![];
-    let mut salts: Vec<F> = vec![];
-    let keys: Vec<F> = read_scalars(keys_filename);
-    let mut trees = vec![];
-    let mut empty_tree = IndexTree::new(index_tree::tree::Leaf::default());
-    trees.push(empty_tree.clone());
+    let hash_x = hash(vec![*x, F::from_u128(BLOCK_HEIGHT)], &x_hash_params);
+    old_dst.insert_vanilla(hash_x);
+    old_dst.clone()
+}
 
-    for (i, x) in keys.iter().enumerate() {
-        let hash_x = hash(vec![*x, F::from_u128(BLOCK_HEIGHT)], &x_hash_params);
-        empty_tree.insert_vanilla(hash_x);
-        if i < keys.len() - 1 {
-            trees.push(empty_tree.clone());
-        }
-
-        // hash output dst
-        let r = F::random(&mut rng);
-        salts.push(r);
-        let hash_root = hash(vec![r, empty_tree.root.clone()], &root_hash_params);
-        hash_output_roots.push(hash_root);
-    }
-
-    assert_eq!(keys.len(), trees.len());
-    assert_eq!(keys.len(), hash_output_roots.len());
-    assert_eq!(keys.len(), salts.len());
-
-    (trees, salts, hash_output_roots)
+pub fn get_empty_dst<F, AX, AL, AN>() -> IndexTree<F, DST_HEIGHT, AL, AN>
+where
+    F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd,
+    AX: Arity<F>,
+    AL: Arity<F>,
+    AN: Arity<F>,
+{
+    IndexTree::new(index_tree::tree::Leaf::default())
 }
 
 pub fn read_utxot<F: PrimeField + PrimeFieldBits, AL: Arity<F>, AN: Arity<F>>(

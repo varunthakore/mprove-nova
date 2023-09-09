@@ -1,0 +1,32 @@
+MProve-Nova iterations
+=========================================================
+Producing public parameters...
+PublicParams::setup, took 25.748725943s 
+Number of constraints per step (primary circuit): 2222220
+Number of constraints per step (secondary circuit): 10347
+Number of variables per step (primary circuit): 2205097
+Number of variables per step (secondary circuit): 10329
+Generating a RecursiveSNARK...
+RecursiveSNARK::prove_step 0: true, took 1.31µs 
+RecursiveSNARK::prove_step 1: true, took 2.355578502s 
+RecursiveSNARK::prove_step 2: true, took 2.495602997s 
+RecursiveSNARK::prove_step 3: true, took 2.552047518s 
+RecursiveSNARK::prove_step 4: true, took 2.546184323s 
+RecursiveSNARK::prove_step 5: true, took 2.662400044s 
+RecursiveSNARK::prove_step 6: true, took 2.592911288s 
+RecursiveSNARK::prove_step 7: true, took 2.67298536s 
+RecursiveSNARK::prove_step 8: true, took 2.573428808s 
+RecursiveSNARK::prove_step 9: true, took 2.678128732s 
+Total time taken by RecursiveSNARK::prove_steps: 23.129268882s
+Verifying a RecursiveSNARK...
+RecursiveSNARK::verify: true, took 1.48680236s
+Generating a CompressedSNARK using Spartan with IPA-PC...
+CompressedSNARK::prove: true, took 36.777310991s
+Total proving time is 70.701612379s
+CompressedSNARK::len 11881 bytes
+Verifying a CompressedSNARK...
+CompressedSNARK::verify: true, took 2.181265697s
+=========================================================
+Public parameters generation time: 25.748725943s 
+Total proving time (excl pp generation): 70.701612379s
+Total verification time: 2.181265697s

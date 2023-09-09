@@ -81,8 +81,6 @@ fn main() {
         // Write blind commitments scalars
         let commitment_blinding_factor = Scalar::random(&mut rng);
         let blind_bytes = commitment_blinding_factor.as_bytes();
-        // let c_blind = g * commitment_blinding_factor;
-        // let (c_blind_x, c_blind_y) = ristretto_to_affine_bytes(c_blind);
         writeln!(commitment_blind_buf, "{}", hex::encode(blind_bytes)).expect(file_err_msg);
 
         // Write P
