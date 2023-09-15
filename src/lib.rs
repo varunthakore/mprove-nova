@@ -1,4 +1,5 @@
 pub mod nova_por;
+pub mod nova_pnc;
 
 use bellpepper_ed25519::{curve::AffinePoint, field::Fe25519};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
