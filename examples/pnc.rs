@@ -52,7 +52,7 @@ fn main() {
         "Number of variables per step (secondary circuit): {}",
         pp.num_variables().1
     );
-    let w0_primary = C1::get_w0();
+    let w0_primary = C1::get_w0(m);
     let z0_primary = C1::get_z0(&w0_primary);
     let z0_secondary = vec![<G2 as Group>::Scalar::zero()];
 
@@ -88,7 +88,7 @@ fn main() {
         recursive_snark_prove_time += end_step;
         
         if i < m-1 {
-            circuit_primary = PNCIteration::get_next_witness(&mut circuit_primary);
+            circuit_primary = PNCIteration::get_next_witness(&mut circuit_primary, i+1);
         }
 
     }
