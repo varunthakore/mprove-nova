@@ -126,7 +126,7 @@ where
 
         // Check membership of ex1_val in Exchnage1 DST
         let alloc_val = AllocatedNum::alloc(&mut cs.namespace(|| "alloc Exchnage1 val"), || Ok(self.ex1_val))?;
-        let (leaf, leaf_idx_int) = self.ex1_dst.get_leaf(self.ex1_val);
+        let (leaf, leaf_idx_int) = self.ex1_dst.get_leaf(Some(self.ex1_val));
         let leaf_idx = idx_to_bits(DST_HEIGHT, F::from(leaf_idx_int));
         let leaf_siblings = self.ex1_dst.get_siblings_path(leaf_idx.clone()).siblings;
         let alloc_leaf = index_tree::circuit::AllocatedLeaf::alloc_leaf(
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_step_pnc() {
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let iter: PNCIteration<Fp, U2, U3> = PNCIteration::get_w0(1);
+        let iter: PNCIteration<Fp, U2, U3> = PNCIteration::get_w0(2);
 
         let z_0: Vec<Fp> = iter.get_z0();
         

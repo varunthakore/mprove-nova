@@ -525,7 +525,7 @@ mod tests {
     use sha3::Keccak512;
 
     #[test]
-    fn test_step() {
+    fn test_step_por() {
         let mut cs = TestConstraintSystem::<Fp>::new();
 
         let num_iters = 1;
