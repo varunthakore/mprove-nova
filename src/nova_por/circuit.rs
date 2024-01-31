@@ -291,7 +291,7 @@ where
         // Calculate one-time address P = xG
         let p: AllocatedAffinePoint<F> = b_alloc
             .clone()
-            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate p"), x_vec.clone())?;
+            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate p"), &x_vec.clone())?;
 
         // Check UTXO Tree root
         let alloc_utxot_root =
@@ -368,7 +368,7 @@ where
         )?;
         let key_img: AllocatedAffinePoint<F> = hp_alloc
             .clone()
-            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate key image"), x_vec)?;
+            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate key image"), &x_vec)?;
 
         // Check non-membership of I in KIT
         let key_img_slice: [F; 4] = point_to_slice(&key_img.get_point());
@@ -457,7 +457,7 @@ where
         // Calculate random point to blind commitment
         let alloc_c_rand: AllocatedAffinePoint<F> = b_alloc
             .clone()
-            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate c_rand"), r_vec.clone())?;
+            .ed25519_scalar_multiplication(&mut cs.namespace(|| "calculate c_rand"), &r_vec.clone())?;
 
         // Calculate blinded commitment
         let alloc_c =

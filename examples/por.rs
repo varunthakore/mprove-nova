@@ -14,8 +14,8 @@ type E1 = PallasEngine;
 type E2 = VestaEngine;
 type EE1 = nova_snark::provider::ipa_pc::EvaluationEngine<E1>;
 type EE2 = nova_snark::provider::ipa_pc::EvaluationEngine<E2>;
-type S1 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E1, EE1>; // non-preprocessing SNARK
-type S2 = nova_snark::spartan::snark::RelaxedR1CSSNARK<E2, EE2>; // non-preprocessing SNARK
+type S1 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E1, EE1>; // non-preprocessing SNARK
+type S2 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E2, EE2>; // non-preprocessing SNARK
 
 fn main() {
     let cmd = Command::new("MProve-Nova proof generation and verification")
