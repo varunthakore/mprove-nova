@@ -6,7 +6,7 @@ use mprove_nova::nova_pnc::circuit::PNCIteration;
 use nova_snark::{
     traits::circuit::TrivialCircuit,
     traits::snark::RelaxedR1CSSNARKTrait,
-    CompressedSNARK, PublicParams, RecursiveSNARK,
+    CompressedSNARK, PublicParams, RecursiveSNARK, StepCounterType, FINAL_EXTERNAL_COUNTER,
 };
 use std::time::{Instant, Duration};
 
@@ -32,13 +32,13 @@ fn main() {
     type C1 = PNCIteration<<E1 as Engine>::Scalar, U2, U3>;
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
     let circuit_primary: C1 = PNCIteration::default();
-    let circuit_secondary: C2 = TrivialCircuit::default();
+    let circuit_secondary: C2 = TrivialCircuit::new(StepCounterType::External);
 
     println!("Proof of Non-Collusion iterations");
     println!("=========================================================");
     let param_gen_timer = Instant::now();
     println!("Producing public parameters...");
-    let pp = PublicParams::<E1, E2, C1, C2>::setup(&circuit_primary, &circuit_secondary, &*S1::ck_floor(), &*S2::ck_floor());
+    let pp = PublicParams::<E1, E2, C1, C2>::setup(&circuit_primary, &circuit_secondary, &*S1::ck_floor(), &*S2::ck_floor()).unwrap();
     let param_gen_time = param_gen_timer.elapsed();
     println!("PublicParams::setup, took {:?} ", param_gen_time);
 
@@ -104,8 +104,7 @@ fn main() {
     // verify the recursive SNARK
     println!("Verifying a RecursiveSNARK...");
     let start = Instant::now();
-    let num_steps = m;
-    let res = recursive_snark.verify(&pp, num_steps, &z0_primary, &z0_secondary);
+    let res = recursive_snark.verify(&pp, FINAL_EXTERNAL_COUNTER, &z0_primary, &z0_secondary);
     println!(
         "RecursiveSNARK::verify: {:?}, took {:?}",
         res.is_ok(),
@@ -142,7 +141,7 @@ fn main() {
     // verify the compressed SNARK
     println!("Verifying a CompressedSNARK...");
     let start = Instant::now();
-    let res = compressed_snark.verify(&vk, num_steps, &z0_primary, &z0_secondary);
+    let res = compressed_snark.verify(&vk, FINAL_EXTERNAL_COUNTER, &z0_primary, &z0_secondary);
     let verification_time = start.elapsed();
     println!(
         "CompressedSNARK::verify: {:?}, took {:?}",

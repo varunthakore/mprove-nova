@@ -15,8 +15,7 @@ ff = "0.13.0"
 bellpepper-ed25519 = { git = "https://github.com/lurk-lab/bellpepper-gadgets.git" }
 merkle-trees = { git = "https://github.com/varunthakore/merkle-trees.git" }
 num-bigint = "0.4.3"
-nova-snark = { git = "https://github.com/varunthakore/Nova.git", branch = "zk" }
-# nova-snark = "0.32.0"
+nova-snark = { git = "https://github.com/varunthakore/Nova.git" }
 itertools = "0.12.0"
 rand_07 = { package = "rand", version = "0.7"}
 rand = "0.8.5"

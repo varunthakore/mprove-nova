@@ -202,6 +202,10 @@ where
         8
     }
 
+    fn get_counter_type(&self) -> nova_snark::StepCounterType {
+        nova_snark::StepCounterType::External
+    }
+
     fn synthesize<CS: ConstraintSystem<F>>(
         &self,
         cs: &mut CS,
