@@ -133,10 +133,11 @@ fn main() {
 
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     bincode::serialize_into(&mut encoder, &compressed_snark).unwrap();
-    let compressed_snark_encoded = encoder.finish().unwrap();
+    let compressed_snark_unencoded = encoder.total_in();
+    let _compressed_snark_encoded = encoder.finish().unwrap();
     println!(
         "CompressedSNARK::len {:?} bytes",
-        compressed_snark_encoded.len()
+        compressed_snark_unencoded
     );
 
     // verify the compressed SNARK
