@@ -257,6 +257,10 @@ pub fn get_utxo_leaf<F: PrimeField + PrimeFieldBits, A: Arity<F>>(
 mod tests {
     use super::*;
     use pasta_curves::Fp;
+    use ff::Field;
+    use generic_array::typenum::{U12, U2, U3};
+    use vanilla_tree::tree::Leaf;
+    use std::time::{Instant, Duration};
 
     fn random_point() -> AffinePoint {
         let mut rng = rand::thread_rng();
@@ -285,5 +289,61 @@ mod tests {
         let slice: [Fp; 4] = point_to_slice(&point);
         let point_rt = slice_to_point(slice);
         assert_eq!(point, point_rt);
+    }
+
+    #[test]
+    fn test_create_kit() {
+        let mut rng = rand::thread_rng();
+        let mut tree: IndexTree<Fp, KIT_HEIGHT, U3, U2> = IndexTree::new(index_tree::tree::Leaf::default());
+
+        let num_values = 1000;
+        let values: Vec<Fp> = (0..num_values).map(|_| Fp::random(&mut rng)).collect();
+
+        let step_start = Instant::now();
+        for new_value in values {
+            // Insert new value at next_insertion_index
+            tree.insert_vanilla(new_value);
+        }
+        let end_step = step_start.elapsed();
+
+        println!(
+            "Total time to construct KIT with {:?} leaves: {:?}",
+            num_values,
+            end_step
+        );
+    }
+
+    #[test]
+    fn test_create_utxo_tree() {
+
+        let empty_leaf_val: Leaf<Fp, U12> = vanilla_tree::tree::Leaf::default();
+        let mut tree: MerkleTree<Fp, UTXO_HEIGHT, U12, U2> = MerkleTree::new(empty_leaf_val);
+
+        let num_leaf: usize = 1000;
+
+        let mut recursive_snark_prove_time = Duration::ZERO;
+        
+        for i in 0..num_leaf {
+            let c = random_point();
+            let p = random_point();
+            let hp = random_point();
+            
+            let step_start = Instant::now();
+
+            let leaf: Leaf<Fp, U12> = get_utxo_leaf(c, p, hp);
+            let idx = Fp::from(i as u64);
+            let idx_in_bits = vanilla_tree::tree::idx_to_bits(UTXO_HEIGHT, idx);
+            let val = leaf;
+            tree.insert(idx_in_bits.clone(), &val);
+
+            let end_step = step_start.elapsed();
+            recursive_snark_prove_time += end_step;
+        }
+
+        println!(
+            "Total time to construct UTXO Tree with {:?} leaves: {:?}",
+            num_leaf,
+            recursive_snark_prove_time
+        ); 
     }
 }
