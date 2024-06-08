@@ -44,6 +44,15 @@ where
     kit: IndexTree<F, KIT_HEIGHT, A3, A2>,
     utxot: MerkleTree<F, UTXO_HEIGHT, A12, A2>,
     utxo_idx: F,
+
+    // Check non-membership of (x||Block_height) in DST
+    x_low_leaf_dst: index_tree::tree::Leaf<F, A3>,
+    x_low_leaf_idx_int_dst: u64,
+
+    // Check non-membership of I in KIT
+    img_low_leaf_kit: index_tree::tree::Leaf<F, A3>,
+    img_low_leaf_idx_int_kit: u64,
+
     _phantom1: PhantomData<A1>,
     _phantom2: PhantomData<A4>,
 }
@@ -67,6 +76,15 @@ where
             kit: IndexTree::new(index_tree::tree::Leaf::default()),
             utxot: MerkleTree::new(vanilla_tree::tree::Leaf::default()),
             utxo_idx: F::ZERO,
+
+            // Check non-membership of (x||Block_height) in DST
+            x_low_leaf_dst: index_tree::tree::Leaf::default(),
+            x_low_leaf_idx_int_dst: 0u64,
+
+            // Check non-membership of I in KIT
+            img_low_leaf_kit: index_tree::tree::Leaf::default(),
+            img_low_leaf_idx_int_kit: 0u64,
+
             _phantom1: PhantomData,
             _phantom2: PhantomData,
         }
@@ -118,6 +136,16 @@ where
         );
         let kit = read_kit();
 
+        // Get hash(x||bh) low leaf in DST
+        let x_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
+        let bh = F::from_u128(BLOCK_HEIGHT as u128);
+        let hash_x = merkle_trees::hash::vanilla::hash(
+            vec![key, bh],
+            &x_hash_params,
+        );
+        let (x_low_leaf_dst, x_low_leaf_idx_int_dst) = dst.get_low_leaf(Some(hash_x));
+
+
         PORIteration {
                 priv_key: key.clone(),
                 c: comm.clone(),
@@ -127,6 +155,15 @@ where
                 kit: kit.clone(),
                 utxot: utxot.clone(),
                 utxo_idx: F::from(0 as u64),
+
+                // Check non-membership of (x||Block_height) in DST
+                x_low_leaf_dst: x_low_leaf_dst,
+                x_low_leaf_idx_int_dst: x_low_leaf_idx_int_dst,
+
+                // Check non-membership of I in KIT
+                img_low_leaf_kit: index_tree::tree::Leaf::default(),
+                img_low_leaf_idx_int_kit: 0u64,
+                
                 _phantom1: PhantomData,
                 _phantom2: PhantomData,
         }
@@ -164,6 +201,15 @@ where
         let utxot = &self.utxot;
         let kit = &self.kit;
 
+        // Get hash(x||bh) low leaf in DST
+        let x_hash_params = Sponge::<F, A2>::api_constants(Strength::Standard);
+        let bh = F::from_u128(BLOCK_HEIGHT as u128);
+        let hash_x = merkle_trees::hash::vanilla::hash(
+            vec![key, bh],
+            &x_hash_params,
+        );
+        let (x_low_leaf_dst, x_low_leaf_idx_int_dst) = new_dst.get_low_leaf(Some(hash_x));
+
         PORIteration {
                 priv_key: key.clone(),
                 c: comm.clone(),
@@ -173,6 +219,15 @@ where
                 kit: kit.clone(),
                 utxot: utxot.clone(),
                 utxo_idx: F::from((line_number-1) as u64),
+
+                // Check non-membership of (x||Block_height) in DST
+                x_low_leaf_dst: x_low_leaf_dst,
+                x_low_leaf_idx_int_dst: x_low_leaf_idx_int_dst,
+
+                // Check non-membership of I in KIT
+                img_low_leaf_kit: index_tree::tree::Leaf::default(),
+                img_low_leaf_idx_int_kit: 0u64,
+                
                 _phantom1: PhantomData,
                 _phantom2: PhantomData,
         }
@@ -282,6 +337,8 @@ where
             alloc_dst_root.clone(),
             self.dst.clone(),
             hash_x.clone(),
+            self.x_low_leaf_dst.clone(),
+            self.x_low_leaf_idx_int_dst
         )?;
         let x_bit =
             AllocatedBit::alloc(cs.namespace(|| "alloc x bit"), x_is_non_member.get_value())?;
@@ -402,6 +459,8 @@ where
             kit_root_var.clone(),
             self.kit.clone(),
             hash_key_img.clone(),
+            self.img_low_leaf_kit.clone(),
+            self.img_low_leaf_idx_int_kit
         )?;
         let k_bit = AllocatedBit::alloc(
             cs.namespace(|| "alloc k bit"),
@@ -421,6 +480,8 @@ where
             &mut next_dst,
             alloc_dst_root,
             hash_x.clone(),
+            self.x_low_leaf_dst.clone(),
+            self.x_low_leaf_idx_int_dst
         )?;
         let next_dst_root_alloc =
             AllocatedNum::alloc(cs.namespace(|| "dst root var output"), || Ok(next_dst.root))?;

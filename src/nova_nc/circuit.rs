@@ -21,6 +21,18 @@ where
     pub ex1_dst: IndexTree<F, DST_HEIGHT, A3, A2>,
     pub ex2_val: F,
     pub ex2_dst: IndexTree<F, DST_HEIGHT, A3, A2>,
+
+    // Check membership of ex2_val in Exchnage2 DST
+    check_member_leaf: index_tree::tree::Leaf<F, A3>,
+    check_member_leaf_idx_int: u64,
+
+    // low leaf of ex2_val in OIT
+    ex2_val_low_leaf_oit: index_tree::tree::Leaf<F, A3>,
+    ex2_val_low_leaf_idx_int_oit: u64,
+
+    // low leaf of ex2_val in Exchnage1 DST
+    ex2_val_low_leaf_dst1: index_tree::tree::Leaf<F, A3>,
+    ex2_val_low_leaf_idx_int_dst1: u64,
 }
 
 impl<F, A2, A3> Default for NCIteration<F, A2, A3>
@@ -35,6 +47,18 @@ where
             ex1_dst: IndexTree::new(index_tree::tree::Leaf::default()),
             ex2_val: F::ZERO,
             ex2_dst: IndexTree::new(index_tree::tree::Leaf::default()),
+
+            // Check membership of ex2_val in Exchnage2 DST
+            check_member_leaf: index_tree::tree::Leaf::default(),
+            check_member_leaf_idx_int: 0u64,
+
+            // low leaf of ex2_val in OIT
+            ex2_val_low_leaf_oit: index_tree::tree::Leaf::default(),
+            ex2_val_low_leaf_idx_int_oit: 0u64,
+
+            // low leaf of ex2_val in Exchnage1 DST
+            ex2_val_low_leaf_dst1: index_tree::tree::Leaf::default(),
+            ex2_val_low_leaf_idx_int_dst1: 0u64,
         }
     }
 }
@@ -49,13 +73,35 @@ where
         let oit = IndexTree::new(index_tree::tree::Leaf::default());
         let ex1_dst = IndexTree::new(index_tree::tree::Leaf::default());
         let ex2_dst = get_full_dst(m+1);
+        let ex2_val = ex2_dst.inserted_leaves[1].value;
+
+        let (check_member_leaf, check_member_leaf_idx_int) = ex2_dst.get_leaf(ex2_val);
+
+        // Get low leaf of ex2_val in OIT
+        let (ex2_val_low_leaf_oit, ex2_val_low_leaf_idx_int_oit) = oit.get_low_leaf(ex2_val);
+
+        // Get low leaf of ex2_val in Exchnage1 DST
+        let (ex2_val_low_leaf_dst1, ex2_val_low_leaf_idx_int_dst1) = ex1_dst.get_low_leaf(ex2_val);
 
 
         NCIteration {
             oit: oit,
             ex1_dst: ex1_dst,
-            ex2_val: ex2_dst.inserted_leaves[1].value.unwrap(),
+            ex2_val: ex2_val.unwrap(),
             ex2_dst: ex2_dst,
+
+            // Check membership of ex2_val in Exchnage2 DST
+            check_member_leaf: check_member_leaf,
+            check_member_leaf_idx_int: check_member_leaf_idx_int,
+
+            // low leaf of ex2_val in OIT
+            ex2_val_low_leaf_oit: ex2_val_low_leaf_oit,
+            ex2_val_low_leaf_idx_int_oit: ex2_val_low_leaf_idx_int_oit,
+
+            // low leaf of ex2_val in Exchnage1 DST
+            ex2_val_low_leaf_dst1: ex2_val_low_leaf_dst1,
+            ex2_val_low_leaf_idx_int_dst1: ex2_val_low_leaf_idx_int_dst1,
+
         }
     }
 
@@ -63,11 +109,36 @@ where
         let mut new_oit = self.oit.clone();
         new_oit.insert_vanilla(self.ex2_val); 
 
+        let ex1_dst = self.ex1_dst.clone();
+        let ex2_val = self.ex2_dst.inserted_leaves[i+1].value;
+        let ex2_dst = self.ex2_dst.clone();
+
+        let (check_member_leaf, check_member_leaf_idx_int) = ex2_dst.get_leaf(ex2_val);
+
+        // Get low leaf of ex2_val in OIT
+        let (ex2_val_low_leaf_oit, ex2_val_low_leaf_idx_int_oit) = new_oit.get_low_leaf(ex2_val);
+
+        // Get low leaf of ex2_val in Exchnage1 DST
+        let (ex2_val_low_leaf_dst1, ex2_val_low_leaf_idx_int_dst1) = ex1_dst.get_low_leaf(ex2_val);
+
+
         NCIteration {
             oit: new_oit,
-            ex1_dst: self.ex1_dst.clone(),
-            ex2_val: self.ex2_dst.inserted_leaves[i+1].value.unwrap(),
-            ex2_dst: self.ex2_dst.clone(),
+            ex1_dst: ex1_dst,
+            ex2_val: ex2_val.unwrap(),
+            ex2_dst: ex2_dst,
+
+            // Check membership of ex2_val in Exchnage2 DST
+            check_member_leaf: check_member_leaf,
+            check_member_leaf_idx_int: check_member_leaf_idx_int,
+
+            // low leaf of ex2_val in OIT
+            ex2_val_low_leaf_oit: ex2_val_low_leaf_oit,
+            ex2_val_low_leaf_idx_int_oit: ex2_val_low_leaf_idx_int_oit,
+
+            // low leaf of ex2_val in Exchnage1 DST
+            ex2_val_low_leaf_dst1: ex2_val_low_leaf_dst1,
+            ex2_val_low_leaf_idx_int_dst1: ex2_val_low_leaf_idx_int_dst1,
         }
     }
 
@@ -130,12 +201,11 @@ where
 
         // Check membership of ex2_val in Exchnage2 DST
         let alloc_val = AllocatedNum::alloc(&mut cs.namespace(|| "alloc Exchnage2 val"), || Ok(self.ex2_val))?;
-        let (leaf, leaf_idx_int) = self.ex2_dst.get_leaf(Some(self.ex2_val));
-        let leaf_idx = idx_to_bits(DST_HEIGHT, F::from(leaf_idx_int));
+        let leaf_idx = idx_to_bits(DST_HEIGHT, F::from(self.check_member_leaf_idx_int));
         let leaf_siblings = self.ex2_dst.get_siblings_path(leaf_idx.clone()).siblings;
         let alloc_leaf = index_tree::circuit::AllocatedLeaf::alloc_leaf(
             &mut cs.namespace(|| "alloc leaf"), 
-            leaf
+            self.check_member_leaf.clone()
         );
         let leaf_siblings_var: Vec<AllocatedNum<F>> = leaf_siblings
             .into_iter()
@@ -182,6 +252,8 @@ where
             alloc_oit_root.clone(),
             self.oit.clone(),
             alloc_val.clone(),
+            self.ex2_val_low_leaf_oit.clone(),
+            self.ex2_val_low_leaf_idx_int_oit,
         )?;
         let val_bit_oit =
             AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_oit"), val_is_non_member_oit.get_value())?;
@@ -204,6 +276,8 @@ where
             alloc_ex1_dst_root.clone(),
             self.ex1_dst.clone(),
             alloc_val.clone(),
+            self.ex2_val_low_leaf_dst1.clone(),
+            self.ex2_val_low_leaf_idx_int_dst1
         )?;
         let val_bit_dst1 =
             AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_dst1"), val_is_non_member_dst1.get_value())?;
@@ -221,6 +295,8 @@ where
             &mut next_oit,
             alloc_oit_root,
             alloc_val,
+            self.ex2_val_low_leaf_oit.clone(),
+            self.ex2_val_low_leaf_idx_int_oit
         )?;
         let next_oit_root_alloc =
             AllocatedNum::alloc(cs.namespace(|| "oit root var output"), || Ok(next_oit.root))?;
@@ -246,7 +322,7 @@ mod tests {
     use pasta_curves::Fp;
 
     #[test]
-    fn test_step_pnc() {
+    fn test_step_nc() {
         let mut cs = TestConstraintSystem::<Fp>::new();
         let iter: NCIteration<Fp, U2, U3> = NCIteration::get_w0(2);
 
