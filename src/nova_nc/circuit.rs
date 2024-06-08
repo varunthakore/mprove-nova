@@ -11,19 +11,19 @@ use crate::nova_por::utils::DST_HEIGHT;
 use super::utils::get_full_dst;
 
 #[derive(Clone, Debug)]
-pub struct PNCIteration<F, A2, A3>
+pub struct NCIteration<F, A2, A3>
 where
     F: PrimeField + PrimeFieldBits,
     A2: Arity<F> + Send + Sync,
     A3: Arity<F> + Send + Sync,
 {
     pub oit: IndexTree<F, DST_HEIGHT, A3, A2>,
-    pub ex1_val: F,
     pub ex1_dst: IndexTree<F, DST_HEIGHT, A3, A2>,
+    pub ex2_val: F,
     pub ex2_dst: IndexTree<F, DST_HEIGHT, A3, A2>,
 }
 
-impl<F, A2, A3> Default for PNCIteration<F, A2, A3>
+impl<F, A2, A3> Default for NCIteration<F, A2, A3>
 where
     F: PrimeField + PrimeFieldBits + PartialOrd,
     A2: Arity<F> + Send + Sync,
@@ -32,41 +32,41 @@ where
     fn default() -> Self {
         Self {
             oit: IndexTree::new(index_tree::tree::Leaf::default()),
-            ex1_val: F::ZERO,
             ex1_dst: IndexTree::new(index_tree::tree::Leaf::default()),
+            ex2_val: F::ZERO,
             ex2_dst: IndexTree::new(index_tree::tree::Leaf::default()),
         }
     }
 }
 
-impl<F, A2, A3> PNCIteration<F, A2, A3>
+impl<F, A2, A3> NCIteration<F, A2, A3>
 where
     F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd,
     A2: Arity<F> + Send + Sync,
     A3: Arity<F> + Send + Sync,
 {
-    pub fn get_w0(m: usize) -> PNCIteration<F, A2, A3> {
+    pub fn get_w0(m: usize) -> NCIteration<F, A2, A3> {
         let oit = IndexTree::new(index_tree::tree::Leaf::default());
-        let ex1_dst = get_full_dst(m+1);
-        let ex2_dst = IndexTree::new(index_tree::tree::Leaf::default());
+        let ex1_dst = IndexTree::new(index_tree::tree::Leaf::default());
+        let ex2_dst = get_full_dst(m+1);
 
 
-        PNCIteration {
+        NCIteration {
             oit: oit,
-            ex1_val: ex1_dst.inserted_leaves[1].value.unwrap(),
             ex1_dst: ex1_dst,
+            ex2_val: ex2_dst.inserted_leaves[1].value.unwrap(),
             ex2_dst: ex2_dst,
         }
     }
 
-    pub fn get_next_witness(&self, i: usize) -> PNCIteration<F, A2, A3> {
+    pub fn get_next_witness(&self, i: usize) -> NCIteration<F, A2, A3> {
         let mut new_oit = self.oit.clone();
-        new_oit.insert_vanilla(self.ex1_val); 
+        new_oit.insert_vanilla(self.ex2_val); 
 
-        PNCIteration {
+        NCIteration {
             oit: new_oit,
-            ex1_val: self.ex1_dst.inserted_leaves[i+1].value.unwrap(),
             ex1_dst: self.ex1_dst.clone(),
+            ex2_val: self.ex2_dst.inserted_leaves[i+1].value.unwrap(),
             ex2_dst: self.ex2_dst.clone(),
         }
     }
@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<F, A2, A3> StepCircuit<F> for PNCIteration<F, A2, A3>
+impl<F, A2, A3> StepCircuit<F> for NCIteration<F, A2, A3>
 where
     F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits + PartialOrd,
     A2: Arity<F> + Send + Sync,
@@ -128,11 +128,11 @@ where
             |lc| lc + z[2].get_variable() - alloc_ex2_dst_root.get_variable(),
         );
 
-        // Check membership of ex1_val in Exchnage1 DST
-        let alloc_val = AllocatedNum::alloc(&mut cs.namespace(|| "alloc Exchnage1 val"), || Ok(self.ex1_val))?;
-        let (leaf, leaf_idx_int) = self.ex1_dst.get_leaf(Some(self.ex1_val));
+        // Check membership of ex2_val in Exchnage2 DST
+        let alloc_val = AllocatedNum::alloc(&mut cs.namespace(|| "alloc Exchnage2 val"), || Ok(self.ex2_val))?;
+        let (leaf, leaf_idx_int) = self.ex2_dst.get_leaf(Some(self.ex2_val));
         let leaf_idx = idx_to_bits(DST_HEIGHT, F::from(leaf_idx_int));
-        let leaf_siblings = self.ex1_dst.get_siblings_path(leaf_idx.clone()).siblings;
+        let leaf_siblings = self.ex2_dst.get_siblings_path(leaf_idx.clone()).siblings;
         let alloc_leaf = index_tree::circuit::AllocatedLeaf::alloc_leaf(
             &mut cs.namespace(|| "alloc leaf"), 
             leaf
@@ -148,21 +148,21 @@ where
             .enumerate()
             .map(|(i, b)| AllocatedBit::alloc(cs.namespace(|| format!("idx {}", i)), Some(b)))
             .collect::<Result<Vec<AllocatedBit>, SynthesisError>>()?;
-        let val_is_member_dst1 = index_tree::circuit::is_member::<
+        let val_is_member_dst2 = index_tree::circuit::is_member::<
             F,
             A3,
             A2,
             DST_HEIGHT,
             Namespace<'_, F, CS::Root>,
         >(
-            &mut cs.namespace(|| "val is member in Ex1 dst"),
-            alloc_ex1_dst_root.clone(),
+            &mut cs.namespace(|| "val is member in Ex2 dst"),
+            alloc_ex2_dst_root.clone(),
             alloc_leaf.clone(),
             leaf_idx_var,
             leaf_siblings_var.clone(),
         )?;
         let val_bit_dst =
-            AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_dst"), val_is_member_dst1.get_value())?;
+            AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_dst"), val_is_member_dst2.get_value())?;
         cs.enforce(
             || "enforce val_bit_dst equal to one",
             |lc| lc,
@@ -170,7 +170,7 @@ where
             |lc| lc + CS::one() - val_bit_dst.get_variable(),
         );
 
-        // Check non-membership of ex1_val in OIT
+        // Check non-membership of ex2_val in OIT
         let val_is_non_member_oit = index_tree::circuit::is_non_member::<
             F,
             A3,
@@ -192,32 +192,32 @@ where
             |lc| lc + CS::one() - val_bit_oit.get_variable(),
         );
 
-        // Check non-membership of ex1_val in Exchnage2 DST
-        let val_is_non_member_dst2 = index_tree::circuit::is_non_member::<
+        // Check non-membership of ex2_val in Exchange1 DST
+        let val_is_non_member_dst1 = index_tree::circuit::is_non_member::<
             F,
             A3,
             A2,
             DST_HEIGHT,
             Namespace<'_, F, CS::Root>,
         >(
-            cs.namespace(|| "val is non-member in Exchnage2 dst"),
-            alloc_ex2_dst_root.clone(),
-            self.ex2_dst.clone(),
+            cs.namespace(|| "val is non-member in Exchnage1 dst"),
+            alloc_ex1_dst_root.clone(),
+            self.ex1_dst.clone(),
             alloc_val.clone(),
         )?;
-        let val_bit_dst2 =
-            AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_dst2"), val_is_non_member_dst2.get_value())?;
+        let val_bit_dst1 =
+            AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_dst1"), val_is_non_member_dst1.get_value())?;
         cs.enforce(
-            || "enforce val_bit_dst2 equal to one",
+            || "enforce val_bit_dst1 equal to one",
             |lc| lc,
             |lc| lc,
-            |lc| lc + CS::one() - val_bit_dst2.get_variable(),
+            |lc| lc + CS::one() - val_bit_dst1.get_variable(),
         );
 
-        // Insert ex1_val in OIT
+        // Insert ex2_val in OIT
         let mut next_oit = self.oit.clone();
         index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
-            cs.namespace(|| "Insert ex1_val"),
+            cs.namespace(|| "Insert ex2_val"),
             &mut next_oit,
             alloc_oit_root,
             alloc_val,
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn test_step_pnc() {
         let mut cs = TestConstraintSystem::<Fp>::new();
-        let iter: PNCIteration<Fp, U2, U3> = PNCIteration::get_w0(2);
+        let iter: NCIteration<Fp, U2, U3> = NCIteration::get_w0(2);
 
         let z_0: Vec<Fp> = iter.get_z0();
         
@@ -276,7 +276,7 @@ mod tests {
 
         assert_eq!(z_2.len(), iter.arity());
         assert!(cs.is_satisfied());
-        println!("Num constraints = {:?}", cs.num_constraints());
-        println!("Num inputs = {:?}", cs.num_inputs());
+        assert_eq!(cs.num_constraints(), 107896);
+        assert_eq!(cs.num_inputs(), 1);
     }
 }

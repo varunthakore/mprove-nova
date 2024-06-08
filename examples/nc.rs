@@ -2,7 +2,7 @@ use nova_snark::{provider::{PallasEngine, VestaEngine}, traits::Engine};
 use clap::{Arg, Command};
 use flate2::{write::ZlibEncoder, Compression};
 use generic_array::typenum::{U2, U3};
-use mprove_nova::nova_pnc::circuit::PNCIteration;
+use mprove_nova::nova_nc::circuit::NCIteration;
 use nova_snark::{
     traits::circuit::TrivialCircuit,
     traits::snark::RelaxedR1CSSNARKTrait,
@@ -19,19 +19,19 @@ type S2 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E2, EE2>; // non-prepro
 
 fn main() {
     let cmd = Command::new("Non-Collusion proof generation and verification")
-        .bin_name("pnc")
+        .bin_name("nc")
         .arg(
             Arg::new("num_of_iters")
-                .value_name("Number of PNC Iterations")
+                .value_name("Number of NC Iterations")
                 .default_value("1")
                 .value_parser(clap::value_parser!(usize)),
         );
     let m = cmd.get_matches();
     let m = *m.get_one::<usize>("num_of_iters").unwrap();
 
-    type C1 = PNCIteration<<E1 as Engine>::Scalar, U2, U3>;
+    type C1 = NCIteration<<E1 as Engine>::Scalar, U2, U3>;
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
-    let circuit_primary: C1 = PNCIteration::default();
+    let circuit_primary: C1 = NCIteration::default();
     let circuit_secondary: C2 = TrivialCircuit::new(StepCounterType::External);
 
     println!("Proof of Non-Collusion iterations");
@@ -92,7 +92,7 @@ fn main() {
         recursive_snark_prove_time += end_step;
         
         if i < m-1 {
-            circuit_primary = PNCIteration::get_next_witness(&mut circuit_primary, i+1);
+            circuit_primary = NCIteration::get_next_witness(&mut circuit_primary, i+1);
         }
 
     }
