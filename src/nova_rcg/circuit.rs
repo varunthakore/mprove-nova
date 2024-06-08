@@ -27,7 +27,7 @@ use super::utils::{
 };
 
 #[derive(Clone, Debug)]
-pub struct PORIteration<F, A1, A2, A3, A4, A12>
+pub struct RCGIteration<F, A1, A2, A3, A4, A12>
 where
     F: PrimeField + PrimeFieldBits,
     A1: Arity<F> + Send + Sync,
@@ -57,7 +57,7 @@ where
     _phantom2: PhantomData<A4>,
 }
 
-impl<F, A1, A2, A3, A4, A12> Default for PORIteration<F, A1, A2, A3, A4, A12>
+impl<F, A1, A2, A3, A4, A12> Default for RCGIteration<F, A1, A2, A3, A4, A12>
 where
     F: PrimeField + PrimeFieldBits + PartialOrd,
     A1: Arity<F> + Send + Sync,
@@ -91,7 +91,7 @@ where
     }
 }
 
-impl<F, A1, A2, A3, A4, A12> PORIteration<F, A1, A2, A3, A4, A12>
+impl<F, A1, A2, A3, A4, A12> RCGIteration<F, A1, A2, A3, A4, A12>
 where
     F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits<ReprBits = [u64; 4]> + PartialOrd,
     A1: Arity<F> + Send + Sync,
@@ -100,7 +100,7 @@ where
     A4: Arity<F> + Send + Sync,
     A12: Arity<F> + Send + Sync,
 {
-    pub fn get_w0(num_iters: usize) -> PORIteration<F, A1, A2, A3, A4, A12> {
+    pub fn get_w0(num_iters: usize) -> RCGIteration<F, A1, A2, A3, A4, A12> {
         let private_key_file_name = format!("tmp/x_{num_iters}.txt");
         let commitment_file_name = format!("tmp/c_{num_iters}.txt");
         let commitment_blind_file_name = format!("tmp/c_blind_{num_iters}.txt");
@@ -146,7 +146,7 @@ where
         let (x_low_leaf_dst, x_low_leaf_idx_int_dst) = dst.get_low_leaf(Some(hash_x));
 
 
-        PORIteration {
+        RCGIteration {
                 priv_key: key.clone(),
                 c: comm.clone(),
                 r: comm_blind,
@@ -169,7 +169,7 @@ where
         }
     }
 
-    pub fn get_next_witness(&mut self, num_iters: usize, line_number: usize) -> PORIteration<F, A1, A2, A3, A4, A12> {
+    pub fn get_next_witness(&mut self, num_iters: usize, line_number: usize) -> RCGIteration<F, A1, A2, A3, A4, A12> {
         let private_key_file_name = format!("tmp/x_{num_iters}.txt");
         let commitment_file_name = format!("tmp/c_{num_iters}.txt");
         let commitment_blind_file_name = format!("tmp/c_blind_{num_iters}.txt");
@@ -210,7 +210,7 @@ where
         );
         let (x_low_leaf_dst, x_low_leaf_idx_int_dst) = new_dst.get_low_leaf(Some(hash_x));
 
-        PORIteration {
+        RCGIteration {
                 priv_key: key.clone(),
                 c: comm.clone(),
                 r: comm_blind,
@@ -244,7 +244,7 @@ where
     }
 }
 
-impl<F, A1, A2, A3, A4, A12> StepCircuit<F> for PORIteration<F, A1, A2, A3, A4, A12>
+impl<F, A1, A2, A3, A4, A12> StepCircuit<F> for RCGIteration<F, A1, A2, A3, A4, A12>
 where
     F: PrimeField<Repr = [u8; 32]> + PrimeFieldBits + PartialOrd,
     A1: Arity<F> + Send + Sync,
@@ -664,7 +664,7 @@ mod tests {
         let _ = public_key_hash_buf.flush();
         let _ = keyimage_buf.flush();
 
-        let iter: PORIteration<Fp, U1, U2, U3, U4, U12> = PORIteration::get_w0(num_iters);
+        let iter: RCGIteration<Fp, U1, U2, U3, U4, U12> = RCGIteration::get_w0(num_iters);
 
         let mut z_0: Vec<Fp> = vec![
             Fp::from_u128(BLOCK_HEIGHT),

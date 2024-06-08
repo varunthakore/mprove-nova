@@ -7,7 +7,7 @@ use ff::{PrimeField, PrimeFieldBits};
 use nova_snark::traits::circuit::StepCircuit;
 use merkle_trees::index_tree;
 use merkle_trees::index_tree::tree::{IndexTree, idx_to_bits};
-use crate::nova_por::utils::DST_HEIGHT;
+use crate::nova_rcg::utils::DST_HEIGHT;
 use super::utils::get_full_dst;
 
 #[derive(Clone, Debug)]

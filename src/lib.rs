@@ -1,4 +1,4 @@
-pub mod nova_por;
+pub mod nova_rcg;
 pub mod nova_nc;
 
 use bellpepper_ed25519::{curve::AffinePoint, field::Fe25519};

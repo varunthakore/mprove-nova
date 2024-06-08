@@ -2,7 +2,7 @@ use nova_snark::{provider::{PallasEngine, VestaEngine}, traits::Engine};
 use clap::{Arg, Command};
 use flate2::{write::ZlibEncoder, Compression};
 use generic_array::typenum::{U1, U12, U2, U3, U4};
-use mprove_nova::nova_por::circuit::PORIteration;
+use mprove_nova::nova_rcg::circuit::RCGIteration;
 use nova_snark::{
     traits::circuit::TrivialCircuit,
     traits::snark::RelaxedR1CSSNARKTrait,
@@ -18,23 +18,23 @@ type S1 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E1, EE1>; // non-prepro
 type S2 = nova_snark::spartan::zksnark::RelaxedR1CSSNARK<E2, EE2>; // non-preprocessing SNARK
 
 fn main() {
-    let cmd = Command::new("MProve-Nova proof generation and verification")
-        .bin_name("por")
+    let cmd = Command::new("Reserves Commitment generation and verification")
+        .bin_name("rcg")
         .arg(
             Arg::new("num_of_iters")
-                .value_name("Number of POR Iterations")
+                .value_name("Number of RCG Iterations")
                 .default_value("1")
                 .value_parser(clap::value_parser!(usize)),
         );
     let m = cmd.get_matches();
     let m = *m.get_one::<usize>("num_of_iters").unwrap();
 
-    type C1 = PORIteration<<E1 as Engine>::Scalar, U1, U2, U3, U4, U12>;
+    type C1 = RCGIteration<<E1 as Engine>::Scalar, U1, U2, U3, U4, U12>;
     type C2 = TrivialCircuit<<E2 as Engine>::Scalar>;
-    let circuit_primary: C1 = PORIteration::default();
+    let circuit_primary: C1 = RCGIteration::default();
     let circuit_secondary: C2 = TrivialCircuit::new(StepCounterType::External);
 
-    println!("MProve-Nova iterations");
+    println!("Reserves Commitment iterations");
     println!("=========================================================");
     let param_gen_timer = Instant::now();
     println!("Producing public parameters...");
@@ -93,7 +93,7 @@ fn main() {
         recursive_snark_prove_time += end_step;
         
         if i < m-1 {
-            circuit_primary = PORIteration::get_next_witness(&mut circuit_primary, m, i+2);
+            circuit_primary = RCGIteration::get_next_witness(&mut circuit_primary, m, i+2);
         }
 
     }

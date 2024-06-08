@@ -2,7 +2,7 @@ use neptune::Arity;
 use ff::{PrimeField, PrimeFieldBits};
 use merkle_trees::index_tree;
 use merkle_trees::index_tree::tree::IndexTree;
-use crate::nova_por::utils::DST_HEIGHT;
+use crate::nova_rcg::utils::DST_HEIGHT;
 
 
 pub fn get_full_dst<F, AL, AN>(
