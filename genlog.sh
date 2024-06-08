@@ -10,8 +10,8 @@ echo "Values generation complete!"
 echo "Sleeping for 1 mins to give the CPU a break"
 sleep 60
 echo "Generating output logs for $1 iteration"
-command ./target/release/examples/por $1 > ./logs/por/output_$1.txt
+command ./target/release/examples/rcg $1 > ./logs/rcg/output_$1.txt
 echo "Sleeping for 1 mins to give the CPU a break"
 sleep 60
-command ./target/release/examples/pnc $1 > ./logs/pnc/output_$1.txt
+command ./target/release/examples/nc $1 > ./logs/nc/output_$1.txt
 echo "See logs directory for output files"
