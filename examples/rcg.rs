@@ -63,7 +63,6 @@ fn main() {
     let z0_primary = C1::get_z0(&w0_primary);
     let z0_secondary = vec![<E2 as Engine>::Scalar::zero()];
 
-    let proof_gen_timer = Instant::now();
     // produce a recursive SNARK
     println!("Generating a RecursiveSNARK...");
     let mut recursive_snark: RecursiveSNARK<E1, E2, C1, C2> = RecursiveSNARK::<E1, E2, C1, C2>::new(
@@ -120,13 +119,16 @@ fn main() {
     let start = Instant::now();
 
     let res = CompressedSNARK::<_, _, _, _, S1, S2>::prove(&pp, &pk, &recursive_snark);
+
+    let compressed_snark_prove_time = start.elapsed();
+
     println!(
         "CompressedSNARK::prove: {:?}, took {:?}",
         res.is_ok(),
-        start.elapsed()
+        compressed_snark_prove_time
     );
     assert!(res.is_ok());
-    let proving_time = proof_gen_timer.elapsed();
+    let proving_time = recursive_snark_prove_time + compressed_snark_prove_time;
     println!("Total proving time is {:?}", proving_time);
 
     let compressed_snark = res.unwrap();
