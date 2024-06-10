@@ -48,10 +48,17 @@ where
     // Check non-membership of (x||Block_height) in DST
     x_low_leaf_dst: index_tree::tree::Leaf<F, A3>,
     x_low_leaf_idx_int_dst: u64,
+    x_low_leaf_siblings_dst: Vec<F>,
 
     // Check non-membership of I in KIT
     img_low_leaf_kit: index_tree::tree::Leaf<F, A3>,
     img_low_leaf_idx_int_kit: u64,
+    img_low_leaf_siblings_kit: Vec<F>,
+
+    // Insert (x||Block_height) in DST
+    next_insertion_idx: F,
+    next_insertion_idx_siblings: Vec<F>,
+    new_leaf_sib: Vec<F>,
 
     _phantom1: PhantomData<A1>,
     _phantom2: PhantomData<A4>,
@@ -80,10 +87,18 @@ where
             // Check non-membership of (x||Block_height) in DST
             x_low_leaf_dst: index_tree::tree::Leaf::default(),
             x_low_leaf_idx_int_dst: 0u64,
+            x_low_leaf_siblings_dst: vec![F::ZERO; DST_HEIGHT],
 
             // Check non-membership of I in KIT
             img_low_leaf_kit: index_tree::tree::Leaf::default(),
             img_low_leaf_idx_int_kit: 0u64,
+            img_low_leaf_siblings_kit: vec![F::ZERO; DST_HEIGHT],
+
+            // Insert (x||Block_height) in DST
+            next_insertion_idx: F::ZERO,
+            next_insertion_idx_siblings: vec![F::ZERO; DST_HEIGHT],
+            new_leaf_sib: vec![F::ZERO; DST_HEIGHT],
+
 
             _phantom1: PhantomData,
             _phantom2: PhantomData,
@@ -144,6 +159,17 @@ where
             &x_hash_params,
         );
         let (x_low_leaf_dst, x_low_leaf_idx_int_dst) = dst.get_low_leaf(Some(hash_x));
+        let x_low_leaf_siblings_dst = dst.get_siblings_path(idx_to_bits(DST_HEIGHT, F::from(x_low_leaf_idx_int_dst))).siblings;
+
+        let img_low_leaf_siblings_kit = kit.get_siblings_path(idx_to_bits(KIT_HEIGHT, F::from(0))).siblings;
+
+        // Insert (x||Block_height) in DST
+        let next_insertion_idx = dst.next_insertion_idx;
+        let next_insertion_idx_siblings = dst.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
+
+        let mut new_dst = dst.clone();
+        new_dst.insert_vanilla(hash_x);
+        let new_leaf_sib = new_dst.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
 
 
         RCGIteration {
@@ -159,10 +185,17 @@ where
                 // Check non-membership of (x||Block_height) in DST
                 x_low_leaf_dst: x_low_leaf_dst,
                 x_low_leaf_idx_int_dst: x_low_leaf_idx_int_dst,
+                x_low_leaf_siblings_dst: x_low_leaf_siblings_dst,
 
                 // Check non-membership of I in KIT
                 img_low_leaf_kit: index_tree::tree::Leaf::default(),
                 img_low_leaf_idx_int_kit: 0u64,
+                img_low_leaf_siblings_kit: img_low_leaf_siblings_kit,
+
+                // Insert (x||Block_height) in DST
+                next_insertion_idx: next_insertion_idx,
+                next_insertion_idx_siblings: next_insertion_idx_siblings,
+                new_leaf_sib: new_leaf_sib,
                 
                 _phantom1: PhantomData,
                 _phantom2: PhantomData,
@@ -209,6 +242,17 @@ where
             &x_hash_params,
         );
         let (x_low_leaf_dst, x_low_leaf_idx_int_dst) = new_dst.get_low_leaf(Some(hash_x));
+        let x_low_leaf_siblings_dst = new_dst.get_siblings_path(idx_to_bits(DST_HEIGHT, F::from(x_low_leaf_idx_int_dst))).siblings;
+
+        let img_low_leaf_siblings_kit = kit.get_siblings_path(idx_to_bits(KIT_HEIGHT, F::from(0))).siblings;
+
+        // Insert (x||Block_height) in DST
+        let next_insertion_idx = new_dst.next_insertion_idx;
+        let next_insertion_idx_siblings = new_dst.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
+
+        let mut next_dst = new_dst.clone();
+        next_dst.insert_vanilla(hash_x);
+        let new_leaf_sib = next_dst.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
 
         RCGIteration {
                 priv_key: key.clone(),
@@ -223,10 +267,17 @@ where
                 // Check non-membership of (x||Block_height) in DST
                 x_low_leaf_dst: x_low_leaf_dst,
                 x_low_leaf_idx_int_dst: x_low_leaf_idx_int_dst,
+                x_low_leaf_siblings_dst: x_low_leaf_siblings_dst,
 
                 // Check non-membership of I in KIT
                 img_low_leaf_kit: index_tree::tree::Leaf::default(),
                 img_low_leaf_idx_int_kit: 0u64,
+                img_low_leaf_siblings_kit: img_low_leaf_siblings_kit,
+
+                // Insert (x||Block_height) in DST
+                next_insertion_idx: next_insertion_idx,
+                next_insertion_idx_siblings: next_insertion_idx_siblings,
+                new_leaf_sib: new_leaf_sib,
                 
                 _phantom1: PhantomData,
                 _phantom2: PhantomData,
@@ -335,10 +386,10 @@ where
         >(
             cs.namespace(|| "x||BH is non-member"),
             alloc_dst_root.clone(),
-            self.dst.clone(),
             hash_x.clone(),
             self.x_low_leaf_dst.clone(),
-            self.x_low_leaf_idx_int_dst
+            self.x_low_leaf_idx_int_dst,
+            self.x_low_leaf_siblings_dst.clone(),
         )?;
         let x_bit =
             AllocatedBit::alloc(cs.namespace(|| "alloc x bit"), x_is_non_member.get_value())?;
@@ -457,10 +508,10 @@ where
         >(
             cs.namespace(|| "I is non-member"),
             kit_root_var.clone(),
-            self.kit.clone(),
             hash_key_img.clone(),
             self.img_low_leaf_kit.clone(),
-            self.img_low_leaf_idx_int_kit
+            self.img_low_leaf_idx_int_kit,
+            self.img_low_leaf_siblings_kit.clone(),
         )?;
         let k_bit = AllocatedBit::alloc(
             cs.namespace(|| "alloc k bit"),
@@ -474,17 +525,17 @@ where
         );
 
         // Insert (x||Block_height) in DST
-        let mut next_dst = self.dst.clone();
-        index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
+        let next_dst_root_alloc = index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
             cs.namespace(|| "Insert (x||Block_height)"),
-            &mut next_dst,
             alloc_dst_root,
             hash_x.clone(),
             self.x_low_leaf_dst.clone(),
-            self.x_low_leaf_idx_int_dst
+            self.x_low_leaf_idx_int_dst,
+            self.x_low_leaf_siblings_dst.clone(),
+            self.next_insertion_idx,
+            self.next_insertion_idx_siblings.clone(),
+            self.new_leaf_sib.clone(),
         )?;
-        let next_dst_root_alloc =
-            AllocatedNum::alloc(cs.namespace(|| "dst root var output"), || Ok(next_dst.root))?;
 
         // Allocate random scalar r
         let r_alloc = AllocatedNum::alloc(cs.namespace(|| "random scalar"), || Ok(self.r))?;

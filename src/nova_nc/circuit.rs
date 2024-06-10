@@ -6,7 +6,7 @@ use neptune::Arity;
 use ff::{PrimeField, PrimeFieldBits};
 use nova_snark::traits::circuit::StepCircuit;
 use merkle_trees::index_tree;
-use merkle_trees::index_tree::tree::IndexTree;
+use merkle_trees::index_tree::tree::{IndexTree, idx_to_bits};
 use crate::nova_rcg::utils::DST_HEIGHT;
 use super::utils::get_full_dst;
 
@@ -25,10 +25,18 @@ where
     // low leaf of ex2_val in OIT
     ex2_val_low_leaf_oit: index_tree::tree::Leaf<F, A3>,
     ex2_val_low_leaf_idx_int_oit: u64,
+    ex2_val_low_leaf_siblings_oit: Vec<F>,
 
     // low leaf of ex2_val in Exchnage1 DST
     ex2_val_low_leaf_dst1: index_tree::tree::Leaf<F, A3>,
     ex2_val_low_leaf_idx_int_dst1: u64,
+    ex2_val_low_leaf_siblings_dst1: Vec<F>,
+
+    // Insert ex2_val in OIT
+    next_insertion_idx: F,
+    next_insertion_idx_siblings: Vec<F>,
+    new_leaf_sib: Vec<F>,
+
 }
 
 impl<F, A2, A3> Default for NCIteration<F, A2, A3>
@@ -47,10 +55,17 @@ where
             // low leaf of ex2_val in OIT
             ex2_val_low_leaf_oit: index_tree::tree::Leaf::default(),
             ex2_val_low_leaf_idx_int_oit: 0u64,
+            ex2_val_low_leaf_siblings_oit: vec![F::ZERO; DST_HEIGHT],
 
             // low leaf of ex2_val in Exchnage1 DST
             ex2_val_low_leaf_dst1: index_tree::tree::Leaf::default(),
             ex2_val_low_leaf_idx_int_dst1: 0u64,
+            ex2_val_low_leaf_siblings_dst1: vec![F::ZERO; DST_HEIGHT],
+
+            // Insert ex2_val in OIT
+            next_insertion_idx: F::ZERO,
+            next_insertion_idx_siblings: vec![F::ZERO; DST_HEIGHT],
+            new_leaf_sib: vec![F::ZERO; 32],
         }
     }
 }
@@ -69,10 +84,19 @@ where
 
         // Get low leaf of ex2_val in OIT
         let (ex2_val_low_leaf_oit, ex2_val_low_leaf_idx_int_oit) = oit.get_low_leaf(ex2_val);
+        let ex2_val_low_leaf_siblings_oit = oit.get_siblings_path(idx_to_bits(DST_HEIGHT, F::from(ex2_val_low_leaf_idx_int_oit))).siblings;
 
         // Get low leaf of ex2_val in Exchnage1 DST
         let (ex2_val_low_leaf_dst1, ex2_val_low_leaf_idx_int_dst1) = ex1_dst.get_low_leaf(ex2_val);
+        let ex2_val_low_leaf_siblings_dst1 = ex1_dst.get_siblings_path(idx_to_bits(DST_HEIGHT, F::from(ex2_val_low_leaf_idx_int_dst1))).siblings;
 
+        // Insert ex2_val in OIT
+        let next_insertion_idx = oit.next_insertion_idx;
+        let next_insertion_idx_siblings = oit.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
+
+        let mut new_oit = oit.clone();
+        new_oit.insert_vanilla(ex2_val.unwrap());
+        let new_leaf_sib = new_oit.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
 
         NCIteration {
             oit: oit,
@@ -83,11 +107,17 @@ where
             // low leaf of ex2_val in OIT
             ex2_val_low_leaf_oit: ex2_val_low_leaf_oit,
             ex2_val_low_leaf_idx_int_oit: ex2_val_low_leaf_idx_int_oit,
+            ex2_val_low_leaf_siblings_oit: ex2_val_low_leaf_siblings_oit,
 
             // low leaf of ex2_val in Exchnage1 DST
             ex2_val_low_leaf_dst1: ex2_val_low_leaf_dst1,
             ex2_val_low_leaf_idx_int_dst1: ex2_val_low_leaf_idx_int_dst1,
+            ex2_val_low_leaf_siblings_dst1: ex2_val_low_leaf_siblings_dst1,
 
+            // Insert ex2_val in OIT
+            next_insertion_idx: next_insertion_idx,
+            next_insertion_idx_siblings: next_insertion_idx_siblings,
+            new_leaf_sib: new_leaf_sib,
         }
     }
 
@@ -101,10 +131,19 @@ where
 
         // Get low leaf of ex2_val in OIT
         let (ex2_val_low_leaf_oit, ex2_val_low_leaf_idx_int_oit) = new_oit.get_low_leaf(ex2_val);
+        let ex2_val_low_leaf_siblings_oit = new_oit.get_siblings_path(idx_to_bits(DST_HEIGHT, F::from(ex2_val_low_leaf_idx_int_oit))).siblings;
 
         // Get low leaf of ex2_val in Exchnage1 DST
         let (ex2_val_low_leaf_dst1, ex2_val_low_leaf_idx_int_dst1) = ex1_dst.get_low_leaf(ex2_val);
+        let ex2_val_low_leaf_siblings_dst1 = ex1_dst.get_siblings_path(idx_to_bits(DST_HEIGHT, F::from(ex2_val_low_leaf_idx_int_dst1))).siblings;
 
+        // Insert ex2_val in OIT
+        let next_insertion_idx = new_oit.next_insertion_idx;
+        let next_insertion_idx_siblings = new_oit.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
+
+        let mut next_oit = new_oit.clone();
+        next_oit.insert_vanilla(ex2_val.unwrap());
+        let new_leaf_sib = next_oit.get_siblings_path(idx_to_bits(DST_HEIGHT, next_insertion_idx)).siblings;
 
         NCIteration {
             oit: new_oit,
@@ -115,10 +154,17 @@ where
             // low leaf of ex2_val in OIT
             ex2_val_low_leaf_oit: ex2_val_low_leaf_oit,
             ex2_val_low_leaf_idx_int_oit: ex2_val_low_leaf_idx_int_oit,
+            ex2_val_low_leaf_siblings_oit: ex2_val_low_leaf_siblings_oit,
 
             // low leaf of ex2_val in Exchnage1 DST
             ex2_val_low_leaf_dst1: ex2_val_low_leaf_dst1,
             ex2_val_low_leaf_idx_int_dst1: ex2_val_low_leaf_idx_int_dst1,
+            ex2_val_low_leaf_siblings_dst1: ex2_val_low_leaf_siblings_dst1,
+
+            // Insert ex2_val in OIT
+            next_insertion_idx: next_insertion_idx,
+            next_insertion_idx_siblings: next_insertion_idx_siblings,
+            new_leaf_sib: new_leaf_sib,
         }
     }
 
@@ -172,30 +218,6 @@ where
 
         let alloc_val = AllocatedNum::alloc(&mut cs.namespace(|| "alloc Exchnage2 val"), || Ok(self.ex2_val))?;
 
-        // Check non-membership of ex2_val in OIT
-        let val_is_non_member_oit = index_tree::circuit::is_non_member::<
-            F,
-            A3,
-            A2,
-            DST_HEIGHT,
-            Namespace<'_, F, CS::Root>,
-        >(
-            cs.namespace(|| "val is non-member in OIT"),
-            alloc_oit_root.clone(),
-            self.oit.clone(),
-            alloc_val.clone(),
-            self.ex2_val_low_leaf_oit.clone(),
-            self.ex2_val_low_leaf_idx_int_oit,
-        )?;
-        let val_bit_oit =
-            AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_oit"), val_is_non_member_oit.get_value())?;
-        cs.enforce(
-            || "enforce val_bit_oit equal to one",
-            |lc| lc,
-            |lc| lc,
-            |lc| lc + CS::one() - val_bit_oit.get_variable(),
-        );
-
         // Check non-membership of ex2_val in Exchange1 DST
         let val_is_non_member_dst1 = index_tree::circuit::is_non_member::<
             F,
@@ -206,10 +228,10 @@ where
         >(
             cs.namespace(|| "val is non-member in Exchnage1 dst"),
             alloc_ex1_dst_root.clone(),
-            self.ex1_dst.clone(),
             alloc_val.clone(),
             self.ex2_val_low_leaf_dst1.clone(),
-            self.ex2_val_low_leaf_idx_int_dst1
+            self.ex2_val_low_leaf_idx_int_dst1,
+            self.ex2_val_low_leaf_siblings_dst1.clone(),
         )?;
         let val_bit_dst1 =
             AllocatedBit::alloc(cs.namespace(|| "alloc val_bit_dst1"), val_is_non_member_dst1.get_value())?;
@@ -221,17 +243,17 @@ where
         );
 
         // Insert ex2_val in OIT
-        let mut next_oit = self.oit.clone();
-        index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
+        let next_oit_root_alloc = index_tree::circuit::insert::<F, A3, A2, DST_HEIGHT, Namespace<'_, F, CS::Root>>(
             cs.namespace(|| "Insert ex2_val"),
-            &mut next_oit,
             alloc_oit_root,
             alloc_val,
             self.ex2_val_low_leaf_oit.clone(),
-            self.ex2_val_low_leaf_idx_int_oit
+            self.ex2_val_low_leaf_idx_int_oit,
+            self.ex2_val_low_leaf_siblings_oit.clone(),
+            self.next_insertion_idx,
+            self.next_insertion_idx_siblings.clone(),
+            self.new_leaf_sib.clone(),
         )?;
-        let next_oit_root_alloc =
-            AllocatedNum::alloc(cs.namespace(|| "oit root var output"), || Ok(next_oit.root))?;
 
         // Output
         let mut out_vec = vec![];
@@ -283,7 +305,7 @@ mod tests {
 
         assert_eq!(z_2.len(), iter.arity());
         assert!(cs.is_satisfied());
-        assert_eq!(cs.num_constraints(), 91934);
+        assert_eq!(cs.num_constraints(), 71278);
         assert_eq!(cs.num_inputs(), 1);
     }
 }
