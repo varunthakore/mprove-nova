@@ -44,6 +44,7 @@ Next, clone the repository and build the project:
 ```bash
 git clone https://github.com/varunthakore/mprove-nova.git
 cd mprove-nova/
+rustup show
 cargo build --release --examples --bins
 ```
 
@@ -100,6 +101,7 @@ As described in Section 9 of the paper, the NC protocol has constant proof size 
 ### Experiments 
 First, follow the steps to set up and test the environment as described in the **Environment** section. To generate the performance results, run the following command:
 ```bash
+rustup show
 cargo build --release --examples --bins
 ./genlog_all.sh
 ```

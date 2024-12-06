@@ -29,6 +29,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 Clone the repository and run the following commands:
 ```bash
 cd mprove-nova/
+rustup show
 cargo build --release --examples --bins
 ```
 
@@ -79,12 +80,14 @@ cargo run --release --example nc 1000
 To generate benchmarks run the following commands:
 
 ```bash
+rustup show
 cargo build --release --examples --bins
 ./genlog_all.sh
 ```
 
 To generate benchmarks for specific number of addresses run:
 ```bash
+rustup show
 cargo build --release --examples --bins
 ./genlog.sh [num_of_addrs]
 ```
