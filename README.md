@@ -9,7 +9,7 @@ This repository is structured as a Rust library and includes the following key c
 * [`nova_rcg`](src/nova_rcg): Implementation of Nova step computation for reserves commitment generator subprotocol
 * [`nova_nc`](src/nova_nc): Implementation of Nova step computation for non-collusion subprotocol
 * [`examples`](examples): Examples for proof generation and verification of reserves commitment generator and non-collusion subprotocol
-* [`logs`](logs): Output logs of reserves commitment generator and non-collusion subprotocols for varying number of iterations
+* [`logs`](logs): Output logs of reserves commitment generator and non-collusion subprotocols for varying number of addresses
 
 This library has the following major dependencies:
 * [`Nova`](https://github.com/varunthakore/Nova): Zero-Knowledge Implementation of Nova
@@ -50,15 +50,28 @@ cargo test [name_of_test] --release -- --nocapture
 
 The `mprove-nova` library implements examples for reserves commitment generator and non-collusion subprotocols.
 
-To run an example for reserves commitment generator subprotocol, run the following commands by passing the number of iterations as argument:
+To run an example for reserves commitment generator subprotocol, run the following commands by passing the number of addresses as argument:
 ```bash
-cargo run --release --bin gen_values [num_of_iterations]
-cargo run --release --example rcg [num_of_iterations]
+cargo run --release --bin gen_values [num_of_addrs]
+cargo run --release --example rcg [num_of_addrs]
+```
+Here, `num_of_addrs` specifies the number of addresses owned by the exchange for which it wants to compute the total reserves commitment. The `gen_values` binary generates `num_of_addrs` dummy one-time addresses, commitments, and key images, which are subsequently used in the reserves commitment generator protocol when the `rcg` example is executed.
+
+For instance, to calculate the reserves commitment for 1,000 owned addresses:
+```bash
+cargo run --release --bin gen_values 1000
+cargo run --release --example rcg 1000
 ```
 
-To run an example for non-collusion subprotocol, run the following command by passing the number of iterations as argument:
+To run an example for non-collusion subprotocol, run the following command by passing the number of addresses as argument:
 ```bash
-cargo run --release --example nc [num_of_iterations]
+cargo run --release --example nc [num_of_addrs]
+```
+In the non-collusion protocol, exchange Ex2 shares its double-spend tree leaves with exchange Ex1, and Ex1 runs the non-collusion protocol. Here, `num_of_addrs` represents the number of double-spend tree leaves sent by Ex2 to Ex1, which corresponds to the number of addresses owned by Ex2.
+
+For instance, if Ex2 owns 1,000 addresses and Ex1 wants to prove non-collusion with respect to those 1,000 addresses owned by Ex2:
+```bash
+cargo run --release --example nc 1000
 ```
 
 ## Benchmarks
@@ -70,17 +83,17 @@ cargo build --release --examples --bins
 ./genlog_all.sh
 ```
 
-To generate benchmarks for specific number of iterations run:
+To generate benchmarks for specific number of addresses run:
 ```bash
 cargo build --release --examples --bins
-./genlog.sh [num_of_iterations]
+./genlog.sh [num_of_addrs]
 ```
 
 The benchmarks will be generated in the [`logs`](logs) directory which contains two sub-directories:
 * [`rcg`](logs/rcg): Logs for reserves commitment generator subprotocol
 * [`nc`](logs/nc): Logs for non-collusion subprotocol
 
-Each of the above sub-directories will have `output_N.txt` files. These files contain the program output for `N` iterations of the Nova step function, for `N` in the set {500, 1000, 3000, 5000, 7000, 10000, 15000, 20000}. 
+Each of the above sub-directories will have `output_N.txt` files. These files contain the program output for `N` number of addresses, for `N` in the set {500, 1000, 3000, 5000, 7000, 10000, 15000, 20000}. 
 
 ## Existing Benchmarks
 The existing files in the logs directory were generated on a **64 core 2.30GHz Intel Xeon Gold 6314U CPU with 125GB RAM**.

@@ -59,15 +59,28 @@ Ensure that all tests pass successfully without any errors.
 
 The `mprove-nova` library also includes examples for the RCG and NC protocols.
 
-To run an example for the RCG protocol, use the following commands, passing the number of iterations as an argument:
+To run an example for the RCG protocol, use the following commands, passing the number of addresses as an argument:
 ```bash
-cargo run --release --bin gen_values [num_of_iterations]
-cargo run --release --example rcg [num_of_iterations]
+cargo run --release --bin gen_values [num_of_addrs]
+cargo run --release --example rcg [num_of_addrs]
+```
+Here, `num_of_addrs` specifies the number of addresses owned by the exchange for which it wants to compute the total reserves commitment. The `gen_values` binary generates `num_of_addrs` dummy one-time addresses, commitments, and key images, which are subsequently used in the reserves commitment generator protocol when the `rcg` example is executed.
+
+For instance, to calculate the reserves commitment for 1,000 owned addresses:
+```bash
+cargo run --release --bin gen_values 1000
+cargo run --release --example rcg 1000
 ```
 
-To run an example for the NC protocol, use the following command, passing the number of iterations as an argument:
+To run an example for the NC protocol, use the following command, passing the number of addresses as an argument:
 ```bash
-cargo run --release --example nc [num_of_iterations]
+cargo run --release --example nc [num_of_addrs]
+```
+In the non-collusion protocol, exchange Ex2 shares its double-spend tree leaves with exchange Ex1, and Ex1 runs the non-collusion protocol. Here, `num_of_addrs` represents the number of double-spend tree leaves sent by Ex2 to Ex1, which corresponds to the number of addresses owned by Ex2.
+
+For instance, if Ex2 owns 1,000 addresses and Ex1 wants to prove non-collusion with respect to those 1,000 addresses owned by Ex2:
+```bash
+cargo run --release --example nc 1000
 ```
 
 Ensure that running the above examples produces no errors.
