@@ -99,7 +99,7 @@ The benchmarks will be generated in the [`logs`](logs) directory which contains 
 Each of the above sub-directories will have `output_N.txt` files. These files contain the program output for `N` number of addresses, for `N` in the set {500, 1000, 3000, 5000, 7000, 10000, 15000, 20000}. 
 
 ## Existing Benchmarks
-The existing files in the logs directory were generated on a **64 core 2.30GHz Intel Xeon Gold 6314U CPU with 125GB RAM**.
+The existing files in the logs directory were generated on a **64 core 2.30GHz Intel Xeon Gold 6314U CPU with 125GiB RAM**.
 
 ### Proving Time
 
