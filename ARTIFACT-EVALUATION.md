@@ -96,7 +96,7 @@ As described in Section 9 of the paper, the RCG protocol has constant proof size
 #### Main Result 2: NC Protocol Performance Results
 As described in Section 9 of the paper, the NC protocol has constant proof size and verification time of 24 KB and 0.2 seconds, respectively. The proving time is linear in the number of exchange-owned outputs, taking about 47 minutes per 10,000 outputs. The steps to reproduce these results are outlined in the **Experiments** section.
 
-#### Main Result 2: Performance Comparison between MProve-Nova RCG, MProve+ and MProve
+#### Main Result 3: Performance Comparison between MProve-Nova RCG, MProve+ and MProve
 Section 9 of the paper presents a performance comparison among MProve-Nova RCG, MProve+, and MProve, as shown in **Table 1**. The steps to reproduce **Table 1** are detailed in the Experiments section.
 
 ### Experiments 
