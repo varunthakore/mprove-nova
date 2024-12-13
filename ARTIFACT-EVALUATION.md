@@ -39,6 +39,12 @@ First, install Rust on macOS, Linux, or another Unix-like OS, using the followin
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+Install `build-essential` package for Ubuntu using the following command:
+```bash
+sudo apt update
+sudo apt install build-essential
+```
+
 Next, clone the repository and build the project:
 ```bash
 git clone https://github.com/varunthakore/mprove-nova.git
